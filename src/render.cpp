@@ -838,7 +838,7 @@ static uint8_t rainSpeed[64], rainLen[64];
 static uint32_t rainSeed = 12345;
 static uint32_t rnd() { return rainSeed = rainSeed * 1103515245u + 12345u; }
 
-// mask of the hidden word: true where a letter is (rain skips those pixels, so the word shows as dark shapes)
+// mask of the hidden word: true where a letter is (the rain only falls inside the letters)
 static bool rainMask[32][64];
 static String rainMaskWord = "\x01";
 static void buildRainMask(const String &w) {
@@ -876,10 +876,10 @@ void drawDigitalRain(int frame) {
       rainLen[x] = lenMin + rnd() % lenRange;
     }
   begin();
-  if (word)  // faint green glow everywhere except the letters, so the word reads as solid black
+  if (word)  // faint green inside the letters, so the word's shape holds between raindrops; the rest stays black
     for (int y = 0; y < 32; y++)
       for (int x = 0; x < 64; x++)
-        if (!rainMask[y][x]) dma->drawPixel(x, y, c565(0x002A0C));
+        if (rainMask[y][x]) dma->drawPixel(x, y, c565(0x003A10));
   for (int x = 0; x < 64; x++) {
     if (frame % rainSpeed[x] == 0) rainY[x]++;
     if (rainY[x] - rainLen[x] > 32) {
@@ -890,7 +890,7 @@ void drawDigitalRain(int frame) {
     for (int k = 0; k < rainLen[x]; k++) {
       int y = rainY[x] - k;
       if (y < 0 || y > 31) continue;
-      if (word && rainMask[y][x]) continue;  // negative space: the word is where the rain isn't
+      if (word && !rainMask[y][x]) continue;  // the word is made of rain: none falls outside the letters
       if (k == 0) dma->drawPixel(x, y, c565(0xD0FFD0));  // bright head
       else dma->drawPixel(x, y, c565(scaleColor(0x00FF40, 1.0f - (float)k / rainLen[x])));
     }

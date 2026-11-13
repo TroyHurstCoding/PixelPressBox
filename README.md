@@ -163,8 +163,8 @@ of the Tronbyt community apps Nixel Clock, Big Clock and Fuzzy Clock (Apache-2.0
 ### Fun screens and pictures
 - **Fireplace** (Tidbyt's Yule Log animation, built into the firmware), **bouncing text** (`cards.bounce_text`, changes color on every wall hit),
   self-playing **Snake** and **Breakout**. No licensed game characters or logos.
-- **Digital rain hidden word:** set `cards.rain_word` (e.g. `"TROY"`). The rain falls everywhere except
-  the letters, so the word shows up as dark shapes in the rain. Up to 5 letters are big, up to 10 small.
+- **Digital rain word:** set `cards.rain_word` (e.g. `"TROY"`). The rain only falls inside the letters, so the
+  word is spelled out in falling code on a black background. Up to 5 letters are big, up to 10 small.
 - **Image shuffle:** put pictures in an `images` folder on the microSD card: animated **GIF**, **PNG** or
   **JPG**. They're shown in random order; GIFs loop for the card's time. 64x32 looks best:
   `python3 tools/make_images.py my_pictures out_folder` (needs `pip3 install pillow`) crops and resizes
