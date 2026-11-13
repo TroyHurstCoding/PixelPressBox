@@ -153,8 +153,14 @@ Turn the ambient cards on or off under `cards`.
 - **Tetris clock:** the time builds itself out of falling blocks. **Digital rain:** Matrix-style falling code.
 Each can be switched off under `cards`.
 
+### Clock styles
+`clock.style` picks the main clock: **classic** (time, date, weather, meeting countdown, busy light),
+**big** (full-height segment digits), **nixie** (glowing tubes), **words** ("HALF / PAST / ELEVEN") or
+**tetris**. The other styles can also rotate in as their own cards (`cards.nixie_clock`, `big_clock`,
+`word_clock`). Only the classic face shows the date, weather and meeting countdown.
+
 ### Fun screens and pictures
-- **Fireplace**, **bouncing logo** (your text, `cards.bounce_text`, changes color on every wall hit),
+- **Fireplace**, **bouncing text** (`cards.bounce_text`, changes color on every wall hit),
   self-playing **Snake** and **Breakout**. Original pixel art, so no licensed game characters.
 - **Digital rain hidden word:** set `cards.rain_word` (e.g. `"TROY"`). The rain falls everywhere except
   the letters, so the word shows up as dark shapes in the rain. Up to 5 letters are big, up to 10 small.

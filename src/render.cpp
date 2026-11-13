@@ -898,31 +898,44 @@ void drawDigitalRain(int frame) {
 }
 
 // ---------------------------------------------------------------- fireplace
-static uint8_t heat[34][64];
+// classic "fire" cellular automaton: heat rises from embers on the logs, cools and drifts. Dark, warm palette.
+static uint8_t heat[36][64];
+static uint32_t firePal(int v) {  // 0..255 -> black, deep red, orange, yellow, pale yellow
+  if (v < 40) return 0;
+  if (v < 100) return ((uint32_t)((v - 40) * 2) << 16);                                  // up to (120,0,0)
+  if (v < 170) return ((uint32_t)(120 + (v - 100) * 2) << 16) | ((uint32_t)((v - 100)) << 8);  // to (260~,70,0)
+  if (v < 225) return (0xFF0000) | ((uint32_t)(70 + (v - 170) * 2) << 8);                // to (255,180,0)
+  return 0xFF0000 | ((uint32_t)(180 + (v - 225)) << 8) | (uint32_t)((v - 225) * 3);     // to pale yellow
+}
 void drawFireplace(int frame) {
   if (frame == 0) memset(heat, 0, sizeof(heat));
-  for (int x = 0; x < 64; x++) heat[33][x] = (x > 4 && x < 59) ? 200 + rnd() % 56 : 0;  // embers along the log
-  for (int y = 0; y < 33; y++)  // heat rises, cools and drifts sideways
+  // embers: hottest over the middle of the logs, a few flaring spots move around
+  for (int x = 0; x < 64; x++) {
+    int d = abs(x - 32);
+    int base = d > 19 ? 0 : 255 - d * 4;
+    heat[35][x] = base ? (uint8_t)std::max(0, base - (int)(rnd() % 90)) : 0;
+  }
+  for (int i = 0; i < 3; i++) heat[35][14 + rnd() % 36] = 255;
+  for (int y = 0; y < 35; y++)
     for (int x = 0; x < 64; x++) {
-      int src = (x + (int)(rnd() % 3) - 1 + 64) % 64;
-      int v = (heat[y + 1][src] + heat[y + 1][x] + heat[y + 1][(x + 1) % 64] + (y + 2 < 34 ? heat[y + 2][x] : 0)) / 4;
-      v -= 3 + rnd() % 14;  // cooling: flames thin out and flicker as they rise
+      int drift = (int)(rnd() % 3) - 1;
+      int sx = std::min(63, std::max(0, x + drift));
+      int v = (heat[y + 1][sx] * 2 + heat[y + 1][std::max(0, x - 1)] + heat[y + 1][std::min(63, x + 1)]) / 4;
+      v -= 3 + rnd() % 8;  // cooling: tongues of flame with dark gaps
       heat[y][x] = v < 0 ? 0 : v;
     }
   begin();
   for (int y = 0; y < 27; y++)
     for (int x = 0; x < 64; x++) {
-      int v = heat[y + 5][x];
-      if (v < 18) continue;
-      uint8_t r = v > 85 ? 255 : v * 3, g = v > 140 ? (v - 140) * 2 + 60 : (v > 85 ? (v - 85) : 0),
-              b = v > 220 ? (v - 220) * 4 : 0;
-      dma->drawPixel(x, y, dma->color565(r, g, b));
+      uint32_t c = firePal(heat[y + 9][x]);
+      if (c) dma->drawPixel(x, y, c565(c));
     }
-  // logs
-  rect(6, 27, 52, 3, 0x5A3418);
-  rect(10, 29, 46, 3, 0x4A2A12);
-  rect(6, 27, 2, 3, 0x7A4A24);
-  rect(54, 29, 2, 3, 0x7A4A24);
+  // logs with a glowing underside
+  rect(8, 26, 48, 3, 0x3A2010);
+  rect(14, 29, 38, 3, 0x2E180C);
+  for (int x = 9; x < 55; x += 3) dma->drawPixel(x, 26, c565(0xC04010 + ((rnd() % 3) << 12)));
+  rect(8, 26, 2, 3, 0x6A4020);
+  rect(50, 29, 2, 3, 0x6A4020);
   end();
 }
 
@@ -943,10 +956,7 @@ void drawBouncer(int frame) {
   if (hitX && hitY) cornerFlash = 20;  // the famous corner hit
   begin();
   uint32_t c = cornerFlash > 0 && (cornerFlash-- / 3) % 2 ? WHITE : COLS[bcol];
-  int x = (int)bx, y = (int)by;
-  rect(x + 1, y, w - 2, h, c);  // rounded box with the text cut out
-  rect(x, y + 1, w, h - 2, c);
-  text(t, x + 2, y + 2, 0x000000);
+  text(t, (int)bx + 1, (int)by + 2, c);  // just the colored letters bouncing around
   (void)frame;
   end();
 }
@@ -1064,5 +1074,92 @@ void displayBlit565(const uint16_t *px) {
   for (int y = 0; y < H; y++)
     for (int x = 0; x < W; x++)
       if (px[y * W + x]) dma->drawPixel(x, y, px[y * W + x]);
+  end();
+}
+
+// ---------------------------------------------------------------- nixie tube clock
+static int clockDigits(time_t now, int d[4]) {
+  struct tm t;
+  localtime_r(&now, &t);
+  int h = CFG.twelveHour ? (t.tm_hour % 12 == 0 ? 12 : t.tm_hour % 12) : t.tm_hour;
+  d[0] = h / 10; d[1] = h % 10; d[2] = t.tm_min / 10; d[3] = t.tm_min % 10;
+  return t.tm_sec;
+}
+
+void drawNixieClock(time_t now, int frame) {
+  int d[4];
+  int sec = clockDigits(now, d);
+  const int CX[4] = {7, 21, 43, 57}, CY = 16, R = 7;
+  begin();
+  for (int i = 0; i < 4; i++) {
+    bool blank = i == 0 && d[0] == 0 && CFG.twelveHour;
+    // the glowing tube: warm, slightly flickering, darker toward the rim
+    for (int y = -R - 1; y <= R + 1; y++)
+      for (int x = -R; x <= R; x++) {
+        float dist = sqrtf((float)(x * x) + (float)(y * y) * 0.8f);
+        if (dist > R + 0.5f) continue;
+        float g = 0.25f + (1.0f - dist / (R + 1)) * 0.75f + ((rnd() % 100) / 100.0f) * 0.15f;
+        if (dist > R - 0.8f) g *= 0.45f;  // darker glass rim
+        if (blank) g *= 0.25f;
+        dma->drawPixel(CX[i] + x, CY + y, c565(scaleColor(0xE8380A, g > 1 ? 1 : g)));
+      }
+    if (blank) continue;
+    // the lit numeral (font glyph), bright amber with a hot core
+    unsigned char ch = '0' + d[i];
+    for (int col = 0; col < 5; col++) {
+      unsigned char bits = font[ch * 5 + col];
+      for (int row = 0; row < 7; row++, bits >>= 1)
+        if (bits & 1) dma->drawPixel(CX[i] - 2 + col, CY - 4 + row, c565(row % 3 == 1 ? 0xFFF0A0 : 0xFFC030));
+    }
+  }
+  uint32_t colon = sec % 2 ? 0xFF8020 : 0xFFC860;
+  rect(31, 12, 2, 2, colon);
+  rect(31, 19, 2, 2, colon);
+  (void)frame;
+  end();
+}
+
+// ---------------------------------------------------------------- big clock (full-height segments)
+// segments: a top, b top-right, c bottom-right, d bottom, e bottom-left, f top-left, g middle
+static const uint8_t SEG[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
+static void bigDigit(int x, int dgt, uint32_t c) {
+  const int w = 13, t = 2, top = 0, mid = 15, bot = 30;
+  uint8_t s = SEG[dgt];
+  if (s & 0x01) rect(x + 2, top, w - 4, t, c);
+  if (s & 0x40) rect(x + 2, mid, w - 4, t, c);
+  if (s & 0x08) rect(x + 2, bot, w - 4, t, c);
+  if (s & 0x20) rect(x, top + 2, t, mid - 3, c);
+  if (s & 0x02) rect(x + w - t, top + 2, t, mid - 3, c);
+  if (s & 0x10) rect(x, mid + 3, t, bot - mid - 4, c);
+  if (s & 0x04) rect(x + w - t, mid + 3, t, bot - mid - 4, c);
+}
+
+void drawBigClock(time_t now) {
+  int d[4];
+  int sec = clockDigits(now, d);
+  begin();
+  const int X[4] = {0, 15, 36, 51};
+  for (int i = 0; i < 4; i++)
+    if (!(i == 0 && d[0] == 0 && CFG.twelveHour)) bigDigit(X[i], d[i], WHITE);
+  if (sec % 2 == 0) {
+    rect(31, 10, 2, 2, WHITE);
+    rect(31, 20, 2, 2, WHITE);
+  }
+  end();
+}
+
+// ---------------------------------------------------------------- word clock
+void drawWordClock(time_t now) {
+  struct tm t;
+  localtime_r(&now, &t);
+  std::vector<String> lines = wordClockLines(t.tm_hour, t.tm_min);
+  int n = lines.size();
+  int pitch = n >= 4 ? 8 : 10, y0 = (32 - (n - 1) * pitch - 7) / 2;
+  begin();
+  for (int i = 0; i < n; i++) {
+    int x = 3 + i * 4;  // staircase
+    if (x + textWidth(lines[i]) > 63) x = 63 - textWidth(lines[i]);
+    text(lines[i], x, y0 + i * pitch, WHITE);
+  }
   end();
 }

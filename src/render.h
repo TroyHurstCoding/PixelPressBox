@@ -41,7 +41,10 @@ void drawFireplace(int frame);
 void displayBlit565(const uint16_t *px);                  // show a 64x32 RGB565 picture
 void drawBouncer(int frame);
 void drawSnake(int frame);
-void drawBreakout(int frame);                               // red, green, blue, 0.6 s each                          // pixels at size 1
+void drawBreakout(int frame);
+void drawNixieClock(time_t now, int frame);
+void drawBigClock(time_t now);
+void drawWordClock(time_t now);                               // red, green, blue, 0.6 s each                          // pixels at size 1
 
 uint32_t teamColor(const Team &t);
 uint32_t teamAlt(const Team &t);

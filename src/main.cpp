@@ -459,6 +459,9 @@ static void rebuild() {
   if (CFG.cardSnake) ambient(CARD_SNAKE, "snake", 12, PRI_AMBIENT);
   if (CFG.cardBreakout) ambient(CARD_BREAKOUT, "breakout", 12, PRI_AMBIENT);
   if (CFG.cardImages && imageCount() > 0) ambient(CARD_IMAGES, "images", 8, PRI_AMBIENT + 1);
+  if (CFG.cardNixie && CFG.clockStyle != "nixie") ambient(CARD_NIXIE, "nixie", 10, PRI_AMBIENT);
+  if (CFG.cardBigClock && CFG.clockStyle != "big") ambient(CARD_BIGCLOCK, "bigclock", 10, PRI_AMBIENT);
+  if (CFG.cardWordClock && CFG.clockStyle != "words") ambient(CARD_WORDCLOCK, "wordclock", 10, PRI_AMBIENT);
   std::vector<Card> cards = buildCards(all, now, extra);
   if (favOnly || CFG.sports == "favorites") {  // drop non-favorite games, keep everything else
     std::vector<Card> f;
@@ -566,8 +569,18 @@ static int showCard(const Card *c) {
       struct tm lt;
       localtime_r(&now, &lt);
       int hol = holidayOn(lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
-      drawClockFace(now, wx, left, col, busyNow(), hol >= 0 ? holidayInfo(hol).color : 0x707070);
-      int r = pump(1000);
+      int frameMs = 1000;
+      if (CFG.clockStyle == "big") drawBigClock(now);
+      else if (CFG.clockStyle == "nixie") {
+        drawNixieClock(now, 0);
+        frameMs = 120;  // the tubes flicker
+      } else if (CFG.clockStyle == "words") drawWordClock(now);
+      else if (CFG.clockStyle == "tetris") {
+        static bool tetrisFirst = true;
+        frameMs = drawTetrisClock(now, tetrisFirst) ? 35 : 250;
+        tetrisFirst = false;
+      } else drawClockFace(now, wx, left, col, busyNow(), hol >= 0 ? holidayInfo(hol).color : 0x707070);
+      int r = pump(frameMs);
       if (r) return r;
     } while (millis() - t0 < (uint32_t)dwell * 1000);
     return 0;
@@ -666,6 +679,17 @@ static int showCard(const Card *c) {
     return maxOff ? pump(2500) : 0;
   }
   if (c->kind == CARD_IMAGES) return playNextImage(c->dwell * 1000, pump);
+  if (c->kind == CARD_NIXIE || c->kind == CARD_BIGCLOCK || c->kind == CARD_WORDCLOCK) {
+    uint32_t t0 = millis();
+    for (int f = 0; millis() - t0 < (uint32_t)c->dwell * 1000; f++) {
+      if (c->kind == CARD_NIXIE) drawNixieClock(nowUtc(), f);
+      else if (c->kind == CARD_BIGCLOCK) drawBigClock(nowUtc());
+      else drawWordClock(nowUtc());
+      int r = pump(c->kind == CARD_NIXIE ? 120 : 500);
+      if (r) return r;
+    }
+    return 0;
+  }
   if (c->kind == CARD_TETRIS) {
     uint32_t t0 = millis();
     bool first = true;

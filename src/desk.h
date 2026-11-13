@@ -20,6 +20,9 @@ bool isBusy(const std::vector<Meeting> &m, time_t now, BusyMode mode);
 // Teams presence -> busy light. Returns true if busy; label gets "IN CALL"/"MEETING"/"DND"/"AWAY"/"" and a color.
 bool presenceBusy(const String &availability, const String &activity, String &label, uint32_t &color);
 
+// word clock: "HALF PAST ELEVEN" as lines, nearest five minutes ("QUARTER" / "TO" / "TWO")
+std::vector<String> wordClockLines(int hour24, int minute);
+
 // text helpers
 String foldAscii(const String &s);                       // curly quotes, dashes, accents -> plain ASCII
 std::vector<String> wrapText(const String &s, int width);  // word wrap to lines of <= width characters

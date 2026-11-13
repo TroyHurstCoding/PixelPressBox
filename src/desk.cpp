@@ -452,3 +452,26 @@ std::vector<Card> standingsCards(const std::vector<StandGroup> &groups, time_t n
   }
   return out;
 }
+
+// ---------------------------------------------------------------- word clock
+std::vector<String> wordClockLines(int h, int m) {
+  static const char *H[] = {"TWELVE", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX",
+                            "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN"};
+  int r = ((m + 2) / 5) * 5;  // nearest five minutes
+  if (r == 60) { r = 0; h++; }
+  int hourNow = h % 12, hourNext = (h + 1) % 12;
+  switch (r) {
+    case 0: return {H[hourNow], "O'CLOCK"};
+    case 5: return {"FIVE", "PAST", H[hourNow]};
+    case 10: return {"TEN", "PAST", H[hourNow]};
+    case 15: return {"QUARTER", "PAST", H[hourNow]};
+    case 20: return {"TWENTY", "PAST", H[hourNow]};
+    case 25: return {"TWENTY", "FIVE PAST", H[hourNow]};
+    case 30: return {"HALF", "PAST", H[hourNow]};
+    case 35: return {"TWENTY", "FIVE TO", H[hourNext]};
+    case 40: return {"TWENTY", "TO", H[hourNext]};
+    case 45: return {"QUARTER", "TO", H[hourNext]};
+    case 50: return {"TEN", "TO", H[hourNext]};
+    default: return {"FIVE", "TO", H[hourNext]};
+  }
+}

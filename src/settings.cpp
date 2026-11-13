@@ -143,6 +143,10 @@ bool loadSettings(const char *path) {
   c.cardSnake = cards["snake"] | c.cardSnake;
   c.cardBreakout = cards["breakout"] | c.cardBreakout;
   c.cardImages = cards["images"] | c.cardImages;
+  c.cardNixie = cards["nixie_clock"] | c.cardNixie;
+  c.cardBigClock = cards["big_clock"] | c.cardBigClock;
+  c.cardWordClock = cards["word_clock"] | c.cardWordClock;
+  c.clockStyle = d["clock"]["style"] | c.clockStyle.c_str();
   c.historyGentle = cards["on_this_day_gentle"] | c.historyGentle;
   c.teamsPresence = d["outlook"]["teams_presence"] | c.teamsPresence;
   c.updatePassword = d["update_password"] | c.updatePassword.c_str();

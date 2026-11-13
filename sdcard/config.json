@@ -2,7 +2,7 @@
   "update_password": "pixelpressbox",
   "auto_update": { "enabled": true, "hour": 3,
                    "manifest": "https://raw.githubusercontent.com/TroyHurstCoding/PixelPressBox/main/firmware/manifest.json" },
-  "clock": { "dwell": 20, "every": 2 },
+  "clock": { "dwell": 20, "every": 2, "style": "classic" },
   "card_dwell": 7,
   "sports": "all",
   "weather": { "lat": 34.05, "lon": -118.24, "units": "F", "poll": 900 },
@@ -19,7 +19,7 @@
              "standings": true, "on_this_day": true, "on_this_day_gentle": true,
              "word_of_the_day": true, "dad_jokes": true, "tetris_clock": true, "digital_rain": true, "rain_word": "",
              "fireplace": true, "bouncing_logo": true, "bounce_text": "PIXEL", "snake": true, "breakout": true,
-             "images": true },
+             "images": true, "nixie_clock": true, "big_clock": true, "word_clock": true },
   "ufc": { "show": true, "days_ahead": 10 },
 
   "leagues": ["nfl", "nba", "mlb"],

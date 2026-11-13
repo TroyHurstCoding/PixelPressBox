@@ -138,5 +138,19 @@ int main() {
   dump("39_snake");
   for (int f = 0; f < 400; f++) drawBreakout(f);
   dump("40_breakout");
+  // ---- clock styles (11:30 PM)
+  time_t late = parseIsoUtc("2026-11-13T07:30:00");
+  CFG.twelveHour = false;
+  for (int f = 0; f < 3; f++) drawNixieClock(late, f);
+  dump("41_nixie_clock");
+  drawBigClock(late); dump("42_big_clock");
+  CFG.twelveHour = true;
+  drawWordClock(late); dump("43_word_clock");
+  drawWordClock(parseIsoUtc("2026-11-13T05:47:00")); dump("44_word_clock_quarter_to");
+  for (int f = 0; f < 80; f++) drawFireplace(f);
+  dump("45_fireplace_v2");
+  CFG.bounceText = "DVD";
+  for (int f = 0; f < 60; f++) drawBouncer(f);
+  dump("46_bouncer_text");
   puts("rendered");
 }

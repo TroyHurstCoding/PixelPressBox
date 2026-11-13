@@ -132,6 +132,8 @@ struct Settings {
   String rainWord;                         // word hidden in the digital rain ("" = none)
   bool cardFire = true, cardBounce = true, cardSnake = true, cardBreakout = true, cardImages = true;
   String bounceText = "PIXEL";             // the bouncing logo's text
+  String clockStyle = "classic";           // main clock: classic | big | nixie | words | tetris
+  bool cardNixie = true, cardBigClock = true, cardWordClock = true;  // extra clock styles in the rotation
   bool historyGentle = true;               // skip "on this day" items about deaths and disasters
   bool teamsPresence = true;               // Teams status drives the busy light (needs Outlook sign-in)
   int ufcDays = 10;                        // show it when the event is this many days away (or live)

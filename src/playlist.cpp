@@ -122,6 +122,9 @@ String cardLabel(const Card &c) {
     case CARD_SNAKE: return "Snake";
     case CARD_BREAKOUT: return "Breakout";
     case CARD_IMAGES: return "Image shuffle";
+    case CARD_NIXIE: return "Nixie clock";
+    case CARD_BIGCLOCK: return "Big clock";
+    case CARD_WORDCLOCK: return "Word clock";
   }
   return c.key;
 }
