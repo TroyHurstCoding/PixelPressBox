@@ -838,7 +838,7 @@ static uint8_t rainSpeed[64], rainLen[64];
 static uint32_t rainSeed = 12345;
 static uint32_t rnd() { return rainSeed = rainSeed * 1103515245u + 12345u; }
 
-// mask of the hidden word: true where a letter is (the rain only falls inside the letters)
+// mask of the hidden word: true where a letter is (rain skips those pixels, so the word shows as black gaps)
 static bool rainMask[32][64];
 static String rainMaskWord = "\x01";
 static void buildRainMask(const String &w) {
@@ -868,7 +868,7 @@ void drawDigitalRain(int frame) {
   if (CFG.rainWord != rainMaskWord) buildRainMask(CFG.rainWord);
   bool word = CFG.rainWord.length() > 0;
   // with a hidden word the rain is denser (longer trails, shorter gaps) so the letters read clearly
-  const int lenMin = word ? 14 : 6, lenRange = word ? 14 : 12, gap = word ? 6 : 16;
+  const int lenMin = word ? 18 : 6, lenRange = word ? 14 : 12, gap = word ? 4 : 16;
   if (frame == 0)
     for (int x = 0; x < 64; x++) {
       rainY[x] = -(int8_t)(rnd() % 32);
@@ -876,10 +876,6 @@ void drawDigitalRain(int frame) {
       rainLen[x] = lenMin + rnd() % lenRange;
     }
   begin();
-  if (word)  // faint green inside the letters, so the word's shape holds between raindrops; the rest stays black
-    for (int y = 0; y < 32; y++)
-      for (int x = 0; x < 64; x++)
-        if (rainMask[y][x]) dma->drawPixel(x, y, c565(0x003A10));
   for (int x = 0; x < 64; x++) {
     if (frame % rainSpeed[x] == 0) rainY[x]++;
     if (rainY[x] - rainLen[x] > 32) {
@@ -890,9 +886,13 @@ void drawDigitalRain(int frame) {
     for (int k = 0; k < rainLen[x]; k++) {
       int y = rainY[x] - k;
       if (y < 0 || y > 31) continue;
-      if (word && !rainMask[y][x]) continue;  // the word is made of rain: none falls outside the letters
+      if (word && rainMask[y][x]) continue;  // normal rain on black, but none falls where the letters are
       if (k == 0) dma->drawPixel(x, y, c565(0xD0FFD0));  // bright head
-      else dma->drawPixel(x, y, c565(scaleColor(0x00FF40, 1.0f - (float)k / rainLen[x])));
+      else {  // with a word the trails fade less, so the black letters stand out against them
+        float b = 1.0f - (float)k / rainLen[x];
+        if (word) b = 0.35f + 0.65f * b;
+        dma->drawPixel(x, y, c565(scaleColor(0x00FF40, b)));
+      }
     }
   }
   end();
