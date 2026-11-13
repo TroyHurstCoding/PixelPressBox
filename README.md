@@ -203,10 +203,13 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
 `FLUSH = 0.3` would sink the panel 0.3 mm to protect the edge LEDs from knocks.
 
 **Layout (as seen from the front):**
-- The board screws onto 4 standoffs on the back cover, in the right half, with the speaker side facing the back.
-  A HUB75 ribbon runs from the board to the panel.
-- **Right wall:** the USB-C window (12.5 × 8 mm) and, above it, the thumbwheel slot with a thumb scoop. The wheel
-  sticks out about 2 mm.
+- The board screws onto 4 standoffs on the back cover, toward the right, 35 mm in from the right wall, with the
+  speaker side facing the back. A HUB75 ribbon runs from the board to the panel.
+- **Walls:** no openings at all. Power comes in through a **panel-mount USB-C extension** (e.g. SparkFun
+  CAB-15455, 6", M3 screws 18 mm apart): its female end screws to the back cover on the right side, its male end
+  plugs into the board's USB-C. The thumbwheel now sits inside the case and isn't used; the accelerometer
+  (tap / double-tap) takes over its jobs. **Check the connector body against `PM_BODY` in `build_case.py`
+  before printing the back cover.**
 - **Back cover:** speaker grille with a gasket ring, 2 mic-hole clusters, and two rows of vents on the side away
   from the board (bottom row lets cool air in, top row lets warm air out). The shell's walls have no slots.
 - 4 screw columns on the back cover line up with the panel's corner holes (126.2 × 66.3 mm center to center).
@@ -216,7 +219,7 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
 
 | Part | Print orientation | Notes |
 | --- | --- | --- |
-| `fit_test.stl` | Front edge down | A 10 mm front ring plus two full-depth wall tabs: right wall (USB-C window, wheel slot) and top wall (accelerometer posts). Checks the panel fit, port alignment (with the back cover in) and the accelerometer |
+| `fit_test.stl` | Front edge down | The shell's first 10 mm (~30 min). Push the panel in: it should slide in with a hair of play |
 | `shell.stl` | Front edge down | No supports. Set **5 wall lines** so the 2 mm wall prints solid |
 | `lid.stl` (back cover) | Outside face down | Standoffs point up, no supports |
 | `stand.stl` | Flat | 12° desk cradle |
@@ -226,6 +229,7 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
 **Hardware and threads:** nothing needs tapping or inserts.
 - 4× M3×35 button head (back cover → panel): the panel's corner holes are already threaded metal.
 - 2× M3×8 (accelerometer → posts in the shell's top wall), self-tapping like the others below.
+- 1 panel-mount USB-C extension cable, 6" (SparkFun CAB-15455 or similar; comes with its 2 M3 screws).
 - 4× M3×8 (shell's top/bottom walls → back cover's rim bosses) and 4× M2.5×8 (board → standoffs): these
   **self-tap** into undersized printed holes (2.6 mm for M3, 2.1 mm for M2.5). Drive each one in slowly the first
   time and don't overtighten; PLA holds fine for occasional opening. If you'll open it a lot, use M3 heat-set inserts.

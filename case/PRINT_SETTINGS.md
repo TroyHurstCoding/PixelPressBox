@@ -3,11 +3,10 @@
 Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 
 ## Order
-1. `fit_test.stl` (about 1 to 1.5 h). A 10 mm front ring plus two full-depth tabs cut from the real shell:
-   the right wall (USB-C window, wheel slot) and the top wall (accelerometer posts). Press the panel in (a hair of
-   play), screw the accelerometer on, and set the back cover in with the board on it to check the USB-C and wheel.
+1. `fit_test.stl` (about 30 min): the shell's first 10 mm. Press the panel in: it should slide in with a hair of play.
 2. `shell.stl`, front edge down, no supports.
-3. `lid.stl` (back cover), outside face down, no supports.
+3. `lid.stl` (back cover), outside face down, no supports. Wait for the USB-C extension cable and check its
+   connector against the cut-out first.
 4. `stand.stl`, as exported.
 
 ## Settings
@@ -33,8 +32,7 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 - The front bezel and the back cover's outside face print against the bed, so they come out the smoothest.
 - The shell's sides show faint layer lines. The slower outer wall and thinner layers above shrink them.
 - The accelerometer posts inside the top wall have 45° ramps on their front side, so they need no supports.
-- The top edge of the USB-C opening and the thumb scoop are short overhangs. If they come out a little
-  rough, clean them up with a hobby knife or fine sandpaper.
+- The shell's walls have no openings, so there's nothing to clean up on the sides.
 
 ## Screws (no tapping or inserts needed)
 - 4x M3x35 button head: back cover into the panel's threaded corner holes.

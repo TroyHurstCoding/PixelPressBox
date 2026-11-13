@@ -10,7 +10,7 @@ Parts (print orientation):
   shell.stl     black PLA   front edge DOWN, no supports. Slicer: 5 wall lines (makes the 2 mm wall solid)
   lid.stl       black PLA   flat, standoffs up, no supports
   stand.stl     black PLA   as exported
-  fit_test.stl              front ring + right-wall tab (USB-C, wheel) + top-wall tab (accelerometer posts)
+  fit_test.stl              the shell's first 10 mm: push the panel in to check the fit
 
 The panel sits FLUSH with the shell's front edge: no lip, no louver, no diffuser. The shell is an open frame
 2 mm wide around the panel (0.3 mm gap). The lid's 4 columns are the panel's stop: the M3 screws pull the
@@ -19,7 +19,7 @@ Hardware: 4x M3x8 (lid -> shell), 4x M2.5x8 (board -> lid standoffs),
           4x M3 button head through the lid columns into the panel's corner holes (length printed by check())
 
 Layout (seen from the FRONT): board in the right half, speaker side facing the back cover.
-Right wall: USB-C (board power + flashing) window and the thumbwheel slot.
+Walls: no openings. Power comes in through a panel-mount USB-C extension screwed to the back cover.
 Back cover: speaker grille + speaker gasket ring, two mic holes, vents. Left wall: air intake.
 Board <-> panel: the HUB75 ribbon cable (board header is right-angle, cable heads toward the middle).
 
@@ -57,10 +57,15 @@ BOARD_UNDER = 3.0         # board underside SMD parts (the 8.5 mm socket is chec
 
 # ----------------------------------------------------------------- board placement
 STANDOFF = 10.5           # lid inner face -> board's top (speaker-side) surface; clears the 9.5 mm VH-4P
-USB_EDGE_GAP = 2.0        # board's USB edge -> inside of the right wall (USB-C overhangs 1.7)
+USB_EDGE_GAP = 35.0       # board's USB edge -> inside of the right wall: room for the extension cable's plug + bend
+                          # (also puts the thumbwheel well inside the case; the accelerometer replaces it)
 BOARD_Y0 = -28.8          # board's bottom edge (front view); centered between the panel screw columns
-PORT_WIN = (12.5, 8.0)    # USB-C plug-overmold window (along wall x height)
-WHEEL_CLR = 0.6           # thumbwheel slot clearance
+# Panel-mount USB-C extension (e.g. SparkFun CAB-15455): its female end screws to the back cover, its male end
+# plugs into the board. The shell has no openings at all. CHECK PM_BODY against the real connector before
+# printing the back cover; the flange hides a slightly oversized cut.
+PM_X, PM_Y = -63.0, 20.0  # front-view position on the back cover (right side, above the plug's path)
+PM_HOLE_DX, PM_HOLE_R = 18.0, 1.6        # 18 mm apart, M3 clearance (screws come with the cable)
+PM_BODY = (12.5, 7.5, 2.0)               # body cut-out: width x height, corner radius
 
 # derived
 CAV_W, CAV_H = PANEL_W + 2 * CLR, PANEL_H + 2 * CLR
@@ -120,7 +125,7 @@ PX, PY = 126.2 / 2, 66.3 / 2
 # two 3.6 mm holes 15.5 mm apart, 2.3 mm in from one long edge; 8-pin header along the other long edge
 # (pins stick out 8.5 mm on the component side, 1.4 mm on the other). It hangs from the INSIDE of the shell's
 # top wall, components and pins facing down into the case, pin edge toward the back cover.
-ACC_X = 35.0               # left half seen from the front, clear of the Seengreat board (right half)
+ACC_X = 40.0               # left half seen from the front, clear of the Seengreat board
 ACC_Z = 30.0               # board center depth (front face at 0); keeps the post ramps behind the panel
 ACC_HOLE_DX, ACC_HOLE_OFF = 15.5, 5.75   # hole spacing; hole row 5.75 mm from the board's center line
 ACC_POST_L, ACC_POST_R = 5.5, 3.0        # posts stand 5.5 mm off the wall (clears the 1.4 mm pin stubs)
@@ -180,19 +185,7 @@ def shell():
     body = Manifold.batch_hull([rounded_slab(OUT_W - 2 * c, OUT_H - 2 * c, 0.01, CORNER_R - c),
                                 rounded_slab(OUT_W, OUT_H, OUT_D - c, CORNER_R, z=c)])
     s = body - box(CAV_W, CAV_H, OUT_D + 2, z=-1)   # open front: the panel fills the whole opening
-    cuts = [y_cyl(1.7, OUT_H + 2, sx, SCREW_Z) for sx in (-SCREW_X, SCREW_X)]
-    # USB-C window in the right wall
-    cuts.append(stadium_x(PORT_WIN[0], PORT_WIN[1], PORT_Y, z_of(PORT_D), WALL * 4, RIGHT * OUT_W / 2))
-    # thumbwheel slot: the wheel rim pokes ~1 mm out of the wall so you can roll and press it
-    r = WHEEL["d"] / 2
-    rim_x = BX1 + (r - WHEEL["cx"])        # front-view x of the wheel's outermost point
-    inset = rim_x - CAV_W / 2              # how far past the inner wall face the rim reaches
-    half_chord = np.sqrt(max(r * r - (r - inset) ** 2, 1.0))
-    cuts.append(stadium_x(2 * half_chord + 2 * WHEEL_CLR, WHEEL["thick"] + 2 * WHEEL_CLR,
-                          WHEEL_Y, z_of(WHEEL_D), WALL * 4, RIGHT * OUT_W / 2))
-    # finger scallop on the outside so the wheel is easy to reach
-    # shallow thumb scoop around the slot: a 6 mm-radius cylinder along Y, sunk 1 mm into the outer wall
-    cuts.append(y_cyl(6.0, 24.0, RIGHT * (OUT_W / 2 + 5.4), z_of(WHEEL_D)).translate((0, WHEEL_Y, 0)))
+    cuts = [y_cyl(1.7, OUT_H + 2, sx, SCREW_Z) for sx in (-SCREW_X, SCREW_X)]   # back-cover screws only
     # accelerometer posts on the inside of the top wall. The shell prints front-down, so each post gets a 45 deg
     # ramp on its front side and needs no supports.
     wall_y = CAV_H / 2
@@ -209,14 +202,8 @@ def shell():
 
 
 def fit_test():
-    """Quick test print, cut from the real shell: a 10 mm front ring (panel fit) plus two full-depth tabs of wall,
-    the right wall around the USB-C window and thumbwheel slot, and the top wall with the accelerometer posts."""
-    big = OUT_D + 2
-    keep = [box(OUT_W + 2, OUT_H + 2, 10.0, z=-1)]                                        # front ring
-    keep.append(rect_box(-OUT_W / 2 - 2, -18, -CAV_W / 2 + 0.01, 28, -1, big))             # right wall tab
-    keep.append(rect_box(18, CAV_H / 2 - 0.01, 52, OUT_H / 2 + 2, -1, big))               # top wall tab
-    keep.append(rect_box(18, CAV_H / 2 - ACC_POST_L - 1, 52, CAV_H / 2, 15, big))          # ...and its posts
-    return shell() ^ union(keep)
+    """Quick test print: the shell's first 10 mm, to check how the panel fits."""
+    return shell().trim_by_plane((0, 0, -1), -10.0)
 
 
 def lid():
@@ -244,9 +231,11 @@ def lid():
     cuts += [cyl(1.05, STANDOFF + 2, fx(hx), hy, LID_T - 0.6) for hx, hy in HOLES]  # 2.1 mm pilot for M2.5
     cuts += [cyl(POST_HOLE_R, LID_T + POST_LEN + 2, fx(x), y, -1) for x, y in POSTS]   # M3 through the column
     cuts += [cyl(CBORE_R, CBORE_D + 1, fx(x), y, -1) for x, y in POSTS]                # head recess
-    # rim relief at the USB window and thumbwheel slot
-    for yy in (PORT_Y, WHEEL_Y):
-        cuts.append(box(RIM_T * 4, 18, RIM_D + 2, x=fx(RIGHT * rim_w / 2), y=yy, z=LID_T - 0.5))
+    # panel-mount USB-C: body cut-out + 2 screw holes
+    w, h, r = PM_BODY
+    body = CrossSection.square((w - 2 * r, h - 2 * r)).translate((-(w - 2 * r) / 2, -(h - 2 * r) / 2))
+    cuts.append(body.offset(r, JoinType.Round, 2.0, SEG).extrude(LID_T + 2).translate((fx(PM_X), PM_Y, -1)))
+    cuts += [cyl(PM_HOLE_R, LID_T + 2, fx(PM_X + dx), PM_Y, -1) for dx in (-PM_HOLE_DX / 2, PM_HOLE_DX / 2)]
     # speaker grille (inside the gasket ring)
     x = -gw / 2 + 3
     while x <= gw / 2 - 3:
@@ -261,7 +250,7 @@ def lid():
         for ox, oy in ((0, 0), (2.2, 0), (-2.2, 0)):
             cuts.append(cyl(0.8, LID_T + 2, fx(mx + ox), my + oy, -1))
     # vents, away from the board: cool air in along the bottom, warm air out along the top (no wall slots)
-    for i in range(-7, 2):
+    for i in range(-7, -2):                 # x 31..67: the left side, clear of the board
         for vy in (VENT_Y, -VENT_Y):
             cuts.append(box(3.0, VENT_H, LID_T + 2, x=fx(RIGHT * (i * 9 - 4)), y=vy, z=-1))
     return l - union(cuts)
@@ -334,8 +323,14 @@ def check():
     if BACK_SPACE - socket_tip < 3:
         errors.append("board's underside socket too close to the panel")
     # 6 wall openings sit in solid wall below the lid rim
-    if PORT_D - PORT_WIN[1] / 2 < 0:
-        errors.append("USB window runs into the back edge")
+    pm_x0, pm_x1 = PM_X - PM_HOLE_DX / 2 - 4, PM_X + PM_HOLE_DX / 2 + 4
+    if pm_x1 > bx0 - 2 and pm_x0 < bx1:
+        errors.append("panel-mount USB-C overlaps the board")
+    for x, y in POSTS:
+        if pm_x0 - POST_BASE_R < x < pm_x1 + POST_BASE_R and abs(y - PM_Y) < 6 + POST_BASE_R:
+            errors.append("panel-mount USB-C hits a panel screw column")
+    if abs(PM_Y - PORT_Y) < 12:
+        errors.append("panel-mount USB-C sits in the plug's path")
     if not 3.0 <= PANEL_BITE <= 5.5:
         errors.append("panel screw bite %.1f mm (want 3-5.5): change PANEL_SCREW or CBORE_D" % PANEL_BITE)
     for x, y in POSTS:
@@ -354,8 +349,8 @@ def check():
     print("checks ok")
     print("  panel screws: M3x%d button head, %.1f mm into the panel's holes" % (PANEL_SCREW, PANEL_BITE))
     print("  board: X %.1f..%.1f (right half seen from the front), Y %.1f..%.1f, speaker side facing the back" % (bx0, bx1, by0, by1))
-    print("  USB-C window center: y %.1f, %.1f mm in from the back edge" % (PORT_Y, PORT_D))
-    print("  thumbwheel slot center: y %.1f, %.1f mm in from the back edge" % (WHEEL_Y, WHEEL_D))
+    print("  board's USB-C: y %.1f, %.0f mm from the right wall; panel-mount USB-C on the back cover at (%.0f, %.0f)" %
+          (PORT_Y, USB_EDGE_GAP, PM_X, PM_Y))
     print("  accelerometer: hangs from the top wall at x %.0f, posts at depth %.1f mm (2x M3x8)" % (ACC_X, ACC_HOLES[0][1]))
     print("  room behind panel %.1f mm; underside socket ends %.1f mm in front of the lid -> %.1f mm to the panel" %
           (BACK_SPACE, socket_tip, BACK_SPACE - socket_tip))
