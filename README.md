@@ -206,7 +206,9 @@ shell's back edge, one at each of the panel's corner holes. The panel rests flat
 cover rests flat on their back faces. One **M3×40 countersunk** screw per pillar goes through the back cover and the
 pillar into the panel, so back cover, shell and panel clamp together as one piece and nothing rattles. **To service
 it, take those 4 screws out from the back and the panel comes out the front**, back cover still on. The pillars
-stand on the bed when the shell prints back-edge down, so they need no supports. Cut-away: `case/panel_tabs.png`. The shell's 4 pillars set the panel's depth, so `PANEL_D` (its thickness) decides how flush it sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, and rerun.
+stand on the bed when the shell prints back-edge down, so they need no supports. Cut-away: `case/panel_tabs.png`.
+
+The shell's 4 pillars set the panel's depth, so `PANEL_D` (its thickness) decides how flush it sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, and rerun.
 `FLUSH = 0.3` would sink the panel 0.3 mm to protect the edge LEDs from knocks.
 
 **Layout (as seen from the front):**
