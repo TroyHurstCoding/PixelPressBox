@@ -1,0 +1,53 @@
+{
+  "update_password": "pixelpressbox",
+  "auto_update": { "enabled": true, "hour": 3,
+                   "manifest": "https://raw.githubusercontent.com/TroyHurstCoding/PixelPressBox/main/firmware/manifest.json" },
+  "clock": { "dwell": 20, "every": 2 },
+  "card_dwell": 7,
+  "sports": "all",
+  "weather": { "lat": 34.05, "lon": -118.24, "units": "F", "poll": 900 },
+  "outlook": { "client_id": "", "tenant": "organizations", "flagged_email": true,
+               "chime_minutes": 2, "soon_minutes": 60, "busy_light": true, "teams_presence": true, "poll": 180 },
+  "spotify": { "client_id": "", "client_secret": "", "refresh_token": "" },
+  "focus": { "minutes": 25, "break": 5 },
+  "countdowns": [
+    { "name": "Vegas", "date": "2026-12-20", "color": "#FFC000" },
+    { "name": "Mom bday", "date": "03-01", "color": "#FF70B0" }
+  ],
+  "holidays": { "show": "all", "countdown_days": 21, "skip": ["Pi Day", "Groundhog Day"] },
+  "cards": { "sun_moon": true, "date_progress": true, "weather_details": true,
+             "standings": true, "on_this_day": true, "on_this_day_gentle": true,
+             "word_of_the_day": true, "dad_jokes": true, "tetris_clock": true, "digital_rain": true },
+  "ufc": { "show": true, "days_ahead": 10 },
+
+  "leagues": ["nfl", "nba", "mlb"],
+  "favorites": {
+    "mlb": ["LAD"],
+    "nfl": ["LV"],
+    "nba": ["LAL"]
+  },
+  "show_all": { "nfl": true, "nba": false, "mlb": false },
+  "celebrate": { "nfl": true, "mlb": true, "nba": false },
+  "celebrate_all": { "nfl": false, "mlb": false, "nba": false },
+
+  "fantasy_players": [
+    { "name": "Shohei Ohtani", "league": "mlb", "team": "LAD" },
+    { "name": "LeBron James", "league": "nba", "team": "LAL" }
+  ],
+
+  "takeover_mix_every": 3,
+  "show_finals_hours": 12,
+  "show_upcoming_hours": 36,
+  "dwell_seconds": { "favorite_live": 10, "default": 5 },
+  "poll_seconds": { "live": 20, "soon": 60, "idle": 300, "offseason": 900, "fantasy": 60, "yahoo": 120 },
+
+  "timezone": "PST8PDT,M3.2.0,M11.1.0",
+  "twelve_hour": true,
+  "brightness": 160,
+  "night": { "start": 23, "end": 7, "brightness": 25 },
+
+  "panel": { "driver": "SHIFTREG", "swap_green_blue": false, "clk_phase": false },
+  "sound": { "enabled": true, "volume": 15, "quiet_at_night": true },
+
+  "yahoo": { "client_id": "", "client_secret": "", "refresh_token": "", "team_key": "" }
+}

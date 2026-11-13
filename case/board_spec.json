@@ -1,0 +1,274 @@
+{
+  "board": "Seengreat RGB Matrix HUB75 S3",
+  "pcb": {
+    "w": 65.0,
+    "h": 57.5,
+    "t": 1.6,
+    "hole_d": 2.7,
+    "holes": [
+      [
+        2.5,
+        2.5
+      ],
+      [
+        62.5,
+        2.5
+      ],
+      [
+        2.5,
+        55.0
+      ],
+      [
+        62.5,
+        55.0
+      ]
+    ]
+  },
+  "parts": [
+    {
+      "name": "speaker",
+      "side": "top",
+      "x0": 14.7,
+      "y0": 4.9,
+      "x1": 52.1,
+      "y1": 30.8,
+      "height": 6.0,
+      "color": "#222222",
+      "source": "photo+EST",
+      "note": "40x28-class oval speaker on foam; height EST"
+    },
+    {
+      "name": "esp32_module",
+      "side": "top",
+      "x0": 11.2,
+      "y0": 32.0,
+      "x1": 29.2,
+      "y1": 57.5,
+      "height": 3.2,
+      "color": "#b8b8b8",
+      "source": "photo+std",
+      "note": "ESP32-S3-WROOM-1 (18 x 25.5 x 3.1)"
+    },
+    {
+      "name": "microsd_socket",
+      "side": "top",
+      "x0": 33.0,
+      "y0": 43.1,
+      "x1": 48.1,
+      "y1": 57.5,
+      "height": 2.0,
+      "color": "#c0c0c0",
+      "source": "photo+std",
+      "note": "card enters from the TOP edge (y=57.5)"
+    },
+    {
+      "name": "hub75_box_header",
+      "side": "top",
+      "x0": 56.5,
+      "y0": 23.2,
+      "x1": 65.3,
+      "y1": 52.4,
+      "height": 9.0,
+      "color": "#111111",
+      "source": "photo+EST",
+      "note": "right-angle 2x8 shrouded header, ribbon enters from the RIGHT (+X)"
+    },
+    {
+      "name": "hub75_header_leads",
+      "side": "top",
+      "x0": 52.0,
+      "y0": 23.2,
+      "x1": 56.5,
+      "y1": 52.4,
+      "height": 3.0,
+      "color": "#d4af37",
+      "source": "photo+EST",
+      "note": "bent pins"
+    },
+    {
+      "name": "vh4p_panel_power",
+      "side": "top",
+      "x0": 54.7,
+      "y0": 4.9,
+      "x1": 65.7,
+      "y1": 22.4,
+      "height": 9.5,
+      "color": "#f2f2f2",
+      "source": "photo+EST",
+      "note": "VH 3.96 4-pin, panel power lead plugs from the RIGHT (+X)"
+    },
+    {
+      "name": "usb_c_board",
+      "side": "top",
+      "x0": -1.7,
+      "y0": 17.5,
+      "x1": 5.6,
+      "y1": 26.8,
+      "height": 3.2,
+      "color": "#9a9a9a",
+      "source": "photo+std",
+      "note": "USB-C: power + flashing (USE THIS ONE). Overhangs left edge ~1.7"
+    },
+    {
+      "name": "usb_c_power",
+      "side": "top",
+      "x0": -1.7,
+      "y0": 5.6,
+      "x1": 5.6,
+      "y1": 14.8,
+      "height": 3.2,
+      "color": "#9a9a9a",
+      "source": "photo+std",
+      "note": "USB-C: extra panel power only (not needed)"
+    },
+    {
+      "name": "thumbwheel_body",
+      "side": "top",
+      "x0": 0.3,
+      "y0": 38.9,
+      "x1": 6.3,
+      "y1": 51.2,
+      "height": 3.0,
+      "color": "#b0b0b0",
+      "source": "photo+EST",
+      "note": "3-way thumbwheel housing"
+    },
+    {
+      "name": "btn_en",
+      "side": "top",
+      "x0": 9.9,
+      "y0": 23.6,
+      "x1": 13.5,
+      "y1": 27.8,
+      "height": 2.0,
+      "color": "#e8d8c8",
+      "source": "photo+std",
+      "note": "EN (reset)"
+    },
+    {
+      "name": "btn_boot",
+      "side": "top",
+      "x0": 9.9,
+      "y0": 16.7,
+      "x1": 13.5,
+      "y1": 20.9,
+      "height": 2.0,
+      "color": "#e8d8c8",
+      "source": "photo+std",
+      "note": "BOOT"
+    },
+    {
+      "name": "jst_i2c_4p",
+      "side": "top",
+      "x0": 0.6,
+      "y0": 29.3,
+      "x1": 4.7,
+      "y1": 36.3,
+      "height": 2.9,
+      "color": "#f2f2f2",
+      "source": "photo+std",
+      "note": "SH1.0 4-pin I2C expansion"
+    },
+    {
+      "name": "jst_rtc_bat",
+      "side": "top",
+      "x0": 50.5,
+      "y0": 53.7,
+      "x1": 54.5,
+      "y1": 57.2,
+      "height": 2.9,
+      "color": "#f2f2f2",
+      "source": "photo+std",
+      "note": "SH1.0 2-pin RTC battery"
+    },
+    {
+      "name": "jst_spk",
+      "side": "top",
+      "x0": 50.9,
+      "y0": 0.7,
+      "x1": 54.9,
+      "y1": 4.5,
+      "height": 4.5,
+      "color": "#f2f2f2",
+      "source": "photo+EST",
+      "note": "speaker plug"
+    },
+    {
+      "name": "mic2",
+      "side": "top",
+      "x0": 12.9,
+      "y0": 1.5,
+      "x1": 14.3,
+      "y1": 3.4,
+      "height": 1.0,
+      "color": "#d4af37",
+      "source": "photo",
+      "note": "microphone 2"
+    },
+    {
+      "name": "mic1",
+      "side": "top",
+      "x0": 58.3,
+      "y0": 1.7,
+      "x1": 59.7,
+      "y1": 3.5,
+      "height": 1.0,
+      "color": "#d4af37",
+      "source": "photo",
+      "note": "microphone 1"
+    },
+    {
+      "name": "inductor_top",
+      "side": "top",
+      "x0": 35.0,
+      "y0": 33.9,
+      "x1": 39.0,
+      "y1": 37.9,
+      "height": 3.0,
+      "color": "#333333",
+      "source": "photo+EST",
+      "note": "2R2 inductor"
+    },
+    {
+      "name": "hub75_socket_bottom",
+      "side": "bot",
+      "x0": 44.4,
+      "y0": 31.3,
+      "x1": 50.5,
+      "y1": 54.3,
+      "height": 8.5,
+      "color": "#151515",
+      "source": "photo+std",
+      "note": "2x8 female socket: plugs straight onto the panel's HUB75 IN header"
+    },
+    {
+      "name": "bottom_parts_zone",
+      "side": "bot",
+      "x0": 6.0,
+      "y0": 6.0,
+      "x1": 44.0,
+      "y1": 50.0,
+      "height": 3.0,
+      "color": "#3a3a3a",
+      "source": "EST",
+      "note": "level shifters, codec, regulators: keep-out"
+    }
+  ],
+  "thumbwheel": {
+    "cx": 0.8,
+    "cy": 45.4,
+    "d": 13.7,
+    "thick": 2.5,
+    "z_center": 3.4000000000000004,
+    "source": "photo+EST"
+  },
+  "envelope": {
+    "x_min": -6.05,
+    "x_max": 65.7,
+    "y_min": 0,
+    "y_max": 57.5,
+    "tallest_top": 9.5,
+    "tallest_bottom": 8.5,
+    "total_thickness": 19.6
+  }
+}

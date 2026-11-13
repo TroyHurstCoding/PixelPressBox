@@ -1,0 +1,2 @@
+ES8311 audio codec driver from Waveshare's ESP32-S3-RGB-Matrix examples
+(https://github.com/waveshareteam/ESP32-S3-RGB-Matrix), Apache License 2.0. Unmodified.

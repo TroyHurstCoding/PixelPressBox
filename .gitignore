@@ -1,0 +1,8 @@
+.pio/
+.vscode/
+__pycache__/
+*.pyc
+test/sim/out/
+test/sim/sim
+tools/.yahoo_signin.json
+.DS_Store
