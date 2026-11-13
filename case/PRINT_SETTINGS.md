@@ -30,12 +30,11 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 ## Expect
 - The front bezel and the back cover's outside face print against the bed, so they come out the smoothest.
 - The shell's sides show faint layer lines. The slower outer wall and thinner layers above shrink them.
-- The accelerometer posts inside the top wall have 45° ramps on their front side, so they need no supports.
 - The shell's walls have no openings, so there's nothing to clean up on the sides.
 
 ## Screws (no tapping or inserts needed)
 - The back cover snaps into the shell: no screws.
 - 4x M3x35 button head: back cover's columns into the panel's threaded corner holes.
 - 4x M2.5x8: board onto the standoffs. They cut their own threads.
-- 2x M3x8: accelerometer onto its two posts inside the shell's top wall. They cut their own threads.
+- 2x M3x6: accelerometer under the fin on the back cover. They cut their own threads.
 - Drive the self-cutting screws slowly the first time and don't overtighten.

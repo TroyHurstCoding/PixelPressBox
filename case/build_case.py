@@ -16,7 +16,7 @@ The panel sits FLUSH with the shell's front edge: no lip, no louver, no diffuser
 2 mm wide around the panel (0.3 mm gap). The lid's 4 columns are the panel's stop: the M3 screws pull the
 panel back against them, so column length (from PANEL_D) decides flushness. Measure the panel's thickness.
 Hardware: 4x M3x35 button head (back cover columns -> panel), 4x M2.5x8 (board -> standoffs),
-          2x M3x8 (accelerometer -> shell posts). The back cover snaps into the shell: no screws.
+          2x M3x6 (accelerometer -> back cover fin). The back cover snaps into the shell: no screws.
 
 Layout (seen from the FRONT): board in the right half, speaker side facing the back cover.
 Walls: no openings. The power supply's cable plugs into the board and snaps into a slot in the back cover's bottom edge.
@@ -133,13 +133,18 @@ MICS = [part_rect("mic1"), part_rect("mic2")]
 PX, PY = 126.2 / 2, 66.3 / 2
 # ADXL345 accelerometer (GY-291 style board, from GY-291_ADXL345_module.step): 20.4 x 16.1 x 1.6 mm PCB,
 # two 3.6 mm holes 15.5 mm apart, 2.3 mm in from one long edge; 8-pin header along the other long edge
-# (pins stick out 8.5 mm on the component side, 1.4 mm on the other). It hangs from the INSIDE of the shell's
-# top wall, components and pins facing down into the case, pin edge toward the back cover.
+# (pins stick out 8.5 mm on the component side, 1.4 mm on the other). It mounts on the BACK COVER, so the shell
+# stays an empty sleeve: a fin rises from the back cover just inside its top rim, and the board hangs under the fin
+# (parallel to the top wall), components and pins facing down, pin edge next to the back cover. The jumper plugs
+# hang down beside the back cover, far from the panel.
 ACC_X = 40.0               # left half seen from the front, clear of the Seengreat board
-ACC_Z = 30.0               # board center depth (front face at 0); keeps the post ramps behind the panel
+ACC_Z = 37.0               # board center depth (front face at 0): close to the back cover, short fin
 ACC_HOLE_DX, ACC_HOLE_OFF = 15.5, 5.75   # hole spacing; hole row 5.75 mm from the board's center line
-ACC_POST_L, ACC_POST_R = 5.5, 3.0        # posts stand 5.5 mm off the wall (clears the 1.4 mm pin stubs)
-ACC_PILOT_R = 1.3                         # 2.6 mm pilot, 6.6 mm deep: an M3x8 bites 6.4 mm; 0.9 mm skin outside
+ACC_FIN_T, ACC_FIN_W = 2.5, 26.0         # fin thickness and width
+ACC_BOSS_L, ACC_BOSS_R = 2.0, 3.0        # bosses under the fin: hold the board 2 mm off it (1.4 mm pin stubs)
+ACC_PILOT_R = 1.3                         # 2.6 mm pilot through boss + fin (4.5 mm): M3x6 self-taps 4.4 mm
+ACC_FIN_Y = CAV_H / 2 - 0.2 - RIM_T - 0.3   # fin's top face, just inside the rim
+ACC_PCB_Y = ACC_FIN_Y - ACC_FIN_T - ACC_BOSS_L   # board's top face
 ACC_HOLES = [(ACC_X - ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF), (ACC_X + ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF)]
 POST_R = 3.3              # column radius (1.6 mm wall around an M3 clearance hole)
 POST_HOLE_R = 1.7         # M3 clearance
@@ -194,7 +199,7 @@ def stadium_x(length_y, height_z, y, z, depth_x, x):
 
 # ----------------------------------------------------------------- parts
 def shell():
-    """An empty sleeve: walls, accelerometer posts, and the snap pockets. Prints front edge down, no supports."""
+    """An empty sleeve: just the walls and the snap pockets. Prints front edge down, no supports."""
     c = FRONT_CHAMFER
     body = Manifold.batch_hull([rounded_slab(OUT_W - 2 * c, OUT_H - 2 * c, 0.01, CORNER_R - c),
                                 rounded_slab(OUT_W, OUT_H, OUT_D - c, CORNER_R, z=c)])
@@ -213,17 +218,6 @@ def shell():
             lip = rect_box(sx * SNAP_X - SNAP_W / 2 - 1, min(y_in, y_in + sy * 0.01), sx * SNAP_X + SNAP_W / 2 + 1,
                            max(y_in, y_in + sy * 0.01), p_front, p_back)
             cuts.append(Manifold.batch_hull([deep, lip]))
-    # accelerometer posts on the inside of the top wall, 45 deg ramp on the front side (prints front-down)
-    wall_y = CAV_H / 2
-    posts = []
-    for hx, hz in ACC_HOLES:
-        cylp = y_cyl(ACC_POST_R, ACC_POST_L + 0.5, hx, hz).translate((0, wall_y - (ACC_POST_L + 0.5) / 2, 0))
-        foot = box(2 * ACC_POST_R, 0.5, 2 * ACC_POST_R + ACC_POST_L, x=hx, y=wall_y + 0.25,
-                   z=hz - ACC_POST_R - ACC_POST_L)
-        posts.append(Manifold.batch_hull([cylp, foot]))
-    s = s + union(posts)
-    cuts += [y_cyl(ACC_PILOT_R, ACC_POST_L + 1.6, hx, hz).translate((0, wall_y - ACC_POST_L / 2 + 0.3, 0))
-             for hx, hz in ACC_HOLES]
     return s - union(cuts)
 
 
@@ -261,6 +255,14 @@ def lid():
             xf = sx * rim_w / 2
             parts.append(rect_box(min(xf, xf + sx * RIB_H), yy - 0.5, max(xf, xf + sx * RIB_H), yy + 0.5,
                                   rib_z0, rib_z1))
+    # accelerometer fin: from the plate to just in front of the board's front edge, bosses on its underside
+    fin_z1 = LID_T + (OUT_D - (ACC_HOLES[0][1] - ACC_BOSS_R - 0.5))
+    parts.append(rect_box(fx(ACC_X) - ACC_FIN_W / 2, ACC_FIN_Y - ACC_FIN_T, fx(ACC_X) + ACC_FIN_W / 2, ACC_FIN_Y,
+                          LID_T - 0.1, fin_z1))
+    for hx, hz in ACC_HOLES:
+        zl = LID_T + (OUT_D - hz)
+        parts.append(y_cyl(ACC_BOSS_R, ACC_BOSS_L + 0.2, fx(hx), zl).translate(
+            (0, ACC_FIN_Y - ACC_FIN_T - ACC_BOSS_L / 2 + 0.1, 0)))
     for hx, hy in HOLES:                    # board standoffs (M2.5)
         parts.append(cyl(2.4, STANDOFF, fx(hx), hy, LID_T))
     for x, y in POSTS:                      # panel columns: the panel's back rests on their ends
@@ -274,6 +276,10 @@ def lid():
     parts.append(box(gw + 2.4, gh + 2.4, ring_h, x=fx(cx), y=cy, z=LID_T) - box(gw, gh, ring_h + 2, x=fx(cx), y=cy, z=LID_T - 1))
     l = union(parts)
     cuts = []
+    for hx, hz in ACC_HOLES:                # accelerometer screw pilots through boss + fin
+        zl = LID_T + (OUT_D - hz)
+        cuts.append(y_cyl(ACC_PILOT_R, ACC_BOSS_L + ACC_FIN_T + 1, fx(hx), zl).translate(
+            (0, ACC_FIN_Y - (ACC_BOSS_L + ACC_FIN_T) / 2, 0)))
     cuts += [cyl(1.05, STANDOFF + 2, fx(hx), hy, LID_T - 0.6) for hx, hy in HOLES]  # 2.1 mm pilot for M2.5
     cuts += [cyl(POST_HOLE_R, LID_T + POST_LEN + 2, fx(x), y, -1) for x, y in POSTS]   # M3 through the column
     cuts += [cyl(CBORE_R, CBORE_D + 1, fx(x), y, -1) for x, y in POSTS]                # head recess
@@ -391,18 +397,19 @@ def check():
     for x, y in POSTS:
         if bx0 - POST_BASE_R < x < bx1 + POST_BASE_R and by0 - POST_BASE_R < y < by1 + POST_BASE_R:
             errors.append("screw column foot at (%.0f,%.0f) reaches under the board" % (x, y))
-    # 7 accelerometer: inside the depth between the panel's back and the back cover's rim, clear of the board
-    if ACC_HOLES[0][1] - ACC_POST_R < PANEL_BACK_Z + 0.5:
-        errors.append("accelerometer posts reach the panel (move ACC_Z back)")
-    if ACC_HOLES[0][1] + ACC_POST_R + ACC_POST_L > OUT_D - RIM_D - 0.5:
-        errors.append("accelerometer post ramps reach the back cover's rim")
-    for x, y in POSTS:                     # columns vs accelerometer board footprint (top wall)
-        if y > 0 and abs(x - ACC_X) < 10.2 + POST_R + 1 and CAV_H / 2 - ACC_POST_L - 1.6 - 8.5 < y + POST_R:
-            errors.append("panel column hits the accelerometer")
-    if not (PANEL_BACK_Z + 1 < ACC_Z - 8.05 and ACC_Z + 8.05 < OUT_D - RIM_D - 1):
-        errors.append("accelerometer board doesn't fit between the panel and the back cover's rim")
+    # 7 accelerometer on the back cover: board + bosses clear of the rim, panel, board, columns and vents
+    if ACC_Z + 8.05 > OUT_D - 0.5:
+        errors.append("accelerometer board touches the back cover")
+    if ACC_HOLES[0][1] - ACC_BOSS_R - 0.5 < PANEL_BACK_Z + 2:
+        errors.append("accelerometer fin reaches the panel")
     if ACC_X - 10.2 < bx1 + 3 and ACC_X + 10.2 > bx0 - 3:
         errors.append("accelerometer hangs over the Seengreat board")
+    for x, y in POSTS:
+        if y > 0 and abs(x - ACC_X) < max(10.2, ACC_FIN_W / 2) + POST_BASE_R + 0.5:
+            errors.append("panel column hits the accelerometer fin")
+    pins_bottom = ACC_PCB_Y - 1.6 - 8.5 - 14.0          # with jumper plugs on
+    if pins_bottom < VENT_Y - VENT_H / 2 - 30:
+        errors.append("accelerometer jumper plugs reach too far down")
     if errors:
         raise SystemExit("CHECK FAILED:\n  " + "\n  ".join(errors))
     print("checks ok")
@@ -411,7 +418,8 @@ def check():
     print("  board: X %.1f..%.1f (right half seen from the front), Y %.1f..%.1f, speaker side facing the back" % (bx0, bx1, by0, by1))
     print("  board's USB-C %.0f mm in from the right wall; power cable leaves the back cover's bottom edge at x %.0f" %
           (USB_EDGE_GAP, CABLE_X))
-    print("  accelerometer: hangs from the top wall at x %.0f, posts at depth %.1f mm (2x M3x8)" % (ACC_X, ACC_HOLES[0][1]))
+    print("  accelerometer: on a fin on the back cover at x %.0f, screws at depth %.1f mm (2x M3x6); shell is empty" %
+          (ACC_X, ACC_HOLES[0][1]))
     print("  room behind panel %.1f mm; underside socket ends %.1f mm in front of the lid -> %.1f mm to the panel" %
           (BACK_SPACE, socket_tip, BACK_SPACE - socket_tip))
 
