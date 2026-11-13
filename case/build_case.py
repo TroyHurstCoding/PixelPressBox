@@ -7,7 +7,7 @@ Tuned for an Ender-3 S1 Pro (0.4 mm nozzle). The board's geometry comes from boa
     python3 board_model.py && python3 build_case.py      # -> stl/*.stl + checks
 
 Parts (print orientation):
-  shell.stl     black PLA   BACK edge down, no supports. Slicer: 5 wall lines (makes the 2 mm wall solid)
+  shell.stl     black PLA/PETG   front edge DOWN, no supports. Slicer: 5 wall lines (makes the 2 mm wall solid)
   lid.stl       black PLA   flat, standoffs up, no supports
   stand.stl     black PLA   as exported
   fit_test.stl              the shell's first 10 mm: push the panel in to check the fit
@@ -15,8 +15,8 @@ Parts (print orientation):
 The panel sits FLUSH with the shell's front edge: no lip, no louver, no diffuser. The shell is an open frame
 2 mm wide around the panel (0.3 mm gap). The lid's 4 columns are the panel's stop: the M3 screws pull the
 panel back against them, so column length (from PANEL_D) decides flushness. Measure the panel's thickness.
-Hardware: 4x M3x8 countersunk (back cover -> shell corner bosses), 4x M2.5x8 (board -> lid standoffs),
-          4x M3x40 countersunk (back cover -> shell pillars -> panel's corner holes)
+Hardware: 4x M3x35 button head (back cover columns -> panel), 4x M2.5x8 (board -> standoffs),
+          2x M3x8 (accelerometer -> shell posts). The back cover snaps into the shell: no screws.
 
 Layout (seen from the FRONT): board in the right half, speaker side facing the back cover.
 Walls: no openings. The power supply's cable plugs into the board and snaps into a slot in the back cover's bottom edge.
@@ -51,10 +51,18 @@ LID_T = 2.4
 CORNER_R = 3.0            # outer corner radius (keeps >= 1.5 mm of wall at the corners)
 RIM_T, RIM_D = 2.0, 6.0
 STAND_ANGLE = 12.0
-# Back cover -> shell: 4 countersunk M3x8 from the back into bosses in the shell's inner corners. No screws in any
-# side wall, so all four sides stay flat (portrait or landscape).
-BOSS = 8.0                # corner boss size (square, in the corner of the cavity)
-BOSS_D = 10.0             # boss depth from the back edge
+# Back cover -> shell: hidden snap catches, no screws. Bumps on the outside of the back cover's rim click into
+# shallow pockets on the inside of the shell's long (top/bottom) walls, 2 per wall, a third of the way in from
+# each end where the walls flex most. To open: spread the long walls near the back edge (or slip a thumbnail /
+# guitar pick into the seam) and lift the back cover out. Small crush ribs on the rim keep it from rattling.
+SNAP_X = None             # set below: +/- a third of the way in from each end
+SNAP_W = 10.0             # bump width along the wall (pocket is 2 mm wider)
+SNAP_H = 0.8              # how far a bump stands proud of the rim
+SNAP_Z0 = 1.5             # bump starts this far in from the back cover's inner face (45 deg catch face)
+SNAP_FLAT, SNAP_RAMP = 0.6, 2.4           # flat top, then a shallow lead-in ramp toward the rim's tip
+POCKET_D = 0.9            # pocket depth into the 2 mm wall (leaves 1.1 mm)
+PRELOAD = 0.1             # pocket's back edge sits this far onto the catch slope: pulls the cover tight
+RIB_H = 0.35              # crush ribs: 0.15 mm interference against the 0.2 mm rim gap
 PANEL_PARTS_H = 17.0      # tallest thing on the panel's back: HUB75 IN header + plugged ribbon + bend
 BOARD_UNDER = 3.0         # board underside SMD parts (the 8.5 mm socket is checked separately)
 
@@ -71,7 +79,7 @@ CABLE_SNAP = 0.6          # slot entry this much narrower than the cable, so it 
 
 # derived
 CAV_W, CAV_H = PANEL_W + 2 * CLR, PANEL_H + 2 * CLR
-BOSS_X, BOSS_Y = CAV_W / 2 - BOSS / 2, CAV_H / 2 - BOSS / 2   # back-cover screw positions
+SNAP_X = CAV_W / 2 - CAV_W / 3            # catches a third of the way in from each end
 OUT_W, OUT_H = CAV_W + 2 * WALL, CAV_H + 2 * WALL
 BOT_H = SPEC["envelope"]["tallest_bottom"]
 # room behind the panel: board stack + clearance over the panel's own connectors
@@ -133,20 +141,17 @@ ACC_HOLE_DX, ACC_HOLE_OFF = 15.5, 5.75   # hole spacing; hole row 5.75 mm from t
 ACC_POST_L, ACC_POST_R = 5.5, 3.0        # posts stand 5.5 mm off the wall (clears the 1.4 mm pin stubs)
 ACC_PILOT_R = 1.3                         # 2.6 mm pilot, 6.6 mm deep: an M3x8 bites 6.4 mm; 0.9 mm skin outside
 ACC_HOLES = [(ACC_X - ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF), (ACC_X + ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF)]
+POST_R = 3.3              # column radius (1.6 mm wall around an M3 clearance hole)
 POST_HOLE_R = 1.7         # M3 clearance
-PANEL_SCREW = 40          # M3x40 countersunk (flat head), from the back
-POST_BASE_R = 5.0         # keep-out radius around each panel screw (for the checks)
+PANEL_SCREW = 35          # M3x35 button head, from the back of the back cover
+CBORE_R, CBORE_D = 3.1, 4.0   # head recess (6.2 mm, fits a 5.7 mm button head)
+POST_BASE_R, POST_BASE_H = 4.3, 6.0   # thicker column foot so the recess has walls
 POSTS = [(-PX, PY), (PX, PY), (-PX, -PY), (PX, -PY)]
 CABLE_Y = -CAV_H / 2 + 2.3 + CABLE_D / 2   # cable center: just inside the lid's rim, close to the bottom edge
-# Panel pillars: one per panel screw, a solid block fused to the shell's top/bottom wall that runs from right behind
-# the panel all the way to the back edge. The panel rests on its front face; the back cover rests flat on its back
-# face (flush with the shell's back edge, like the corner bosses). One M3x40 countersunk screw per pillar goes
-# through the back cover and the pillar into the panel, so back cover + shell + panel clamp together as one piece.
-# To service: take those 4 screws out from the back and the panel comes out the front. The shell prints back-edge
-# down, so the pillars stand on the bed: no overhangs.
-TAB_W = 10.0                              # pillar width along the wall
-TAB_REACH = (CAV_H / 2 - PY) + 4.5        # wall -> 4.5 mm past the screw
-PANEL_BITE = PANEL_SCREW - (OUT_D + LID_T - PANEL_BACK_Z)   # flat head: its top sits flush with the back cover
+# The panel screws to 4 columns on the back cover (once, on the bench, panel face down). Panel + board + back cover
+# are one module that drops into the shell from the back; the column length sets the panel flush at the front.
+POST_LEN = OUT_D - PANEL_BACK_Z
+PANEL_BITE = PANEL_SCREW - (LID_T + POST_LEN - CBORE_D)
 VENT_H, VENT_Y = 12.0, OUT_H / 2 - 23     # top vents end below the upper screw columns
 
 
@@ -189,50 +194,37 @@ def stadium_x(length_y, height_z, y, z, depth_x, x):
 
 # ----------------------------------------------------------------- parts
 def shell():
+    """An empty sleeve: walls, accelerometer posts, and the snap pockets. Prints front edge down, no supports."""
     c = FRONT_CHAMFER
     body = Manifold.batch_hull([rounded_slab(OUT_W - 2 * c, OUT_H - 2 * c, 0.01, CORNER_R - c),
                                 rounded_slab(OUT_W, OUT_H, OUT_D - c, CORNER_R, z=c)])
     s = body - box(CAV_W, CAV_H, OUT_D + 2, z=-1)   # open front: the panel fills the whole opening
     cuts = []
-    # corner bosses for the back-cover screws, flush with the back edge (they sit on the bed; the slope toward the
-    # walls just saves plastic)
-    bosses = []
+    # snap pockets: the catch edge (back side) is square; the front side slopes 45 deg so it prints cleanly
+    # the pocket's square back edge meets the bump's 45 deg catch face where it crosses the wall line (0.2 mm rim
+    # gap), then PRELOAD further in: the wall presses on the slope and pulls the back cover tight
+    p_back = OUT_D - SNAP_Z0 - 0.2 - PRELOAD
+    p_front = OUT_D - SNAP_Z0 - SNAP_H - SNAP_FLAT - SNAP_RAMP - 0.4
     for sx in (-1, 1):
         for sy in (-1, 1):
-            cx, cy = sx * CAV_W / 2, sy * CAV_H / 2                  # the cavity corner
-            blk = rect_box(min(cx, cx - sx * BOSS), min(cy, cy - sy * BOSS), max(cx, cx - sx * BOSS),
-                           max(cy, cy - sy * BOSS), OUT_D - BOSS_D, OUT_D)
-            z0 = OUT_D - BOSS_D - BOSS
-            strip_a = rect_box(min(cx, cx - sx * BOSS), min(cy, cy - sy * 0.5), max(cx, cx - sx * BOSS),
-                               max(cy, cy - sy * 0.5), z0, z0 + 0.1)
-            strip_b = rect_box(min(cx, cx - sx * 0.5), min(cy, cy - sy * BOSS), max(cx, cx - sx * 0.5),
-                               max(cy, cy - sy * BOSS), z0, z0 + 0.1)
-            bosses.append(Manifold.batch_hull([blk, strip_a, strip_b]))
-            cuts.append(cyl(1.3, BOSS_D + 1, sx * BOSS_X, sy * BOSS_Y, OUT_D - BOSS_D + 1))   # 2.6 mm M3 pilot
-    s = s + union(bosses)
-    # panel pillars (see above): flat front face on the panel, flat back face flush with the back edge
-    tabs, tab_holes = [], []
-    for x, y in POSTS:
-        sy = 1 if y > 0 else -1
-        wy = sy * (CAV_H / 2 + 0.5)                       # 0.5 into the wall so it fuses
-        tip_y = sy * (CAV_H / 2 - TAB_REACH)
-        tabs.append(rect_box(x - TAB_W / 2, min(wy, tip_y), x + TAB_W / 2, max(wy, tip_y), PANEL_BACK_Z, OUT_D))
-        tab_holes.append(cyl(POST_HOLE_R, OUT_D, x, y, PANEL_BACK_Z - 1))
-    s = s + union(tabs)
-    cuts += tab_holes
-    # accelerometer posts on the inside of the top wall. The shell prints back-edge down, so each post gets a
-    # 45 deg ramp on its back side and needs no supports.
+            y_in, y_out = sy * CAV_H / 2 - sy * 0.01, sy * (CAV_H / 2 + POCKET_D)
+            deep = rect_box(sx * SNAP_X - SNAP_W / 2 - 1, min(y_in, y_out), sx * SNAP_X + SNAP_W / 2 + 1,
+                            max(y_in, y_out), p_front + POCKET_D, p_back)
+            lip = rect_box(sx * SNAP_X - SNAP_W / 2 - 1, min(y_in, y_in + sy * 0.01), sx * SNAP_X + SNAP_W / 2 + 1,
+                           max(y_in, y_in + sy * 0.01), p_front, p_back)
+            cuts.append(Manifold.batch_hull([deep, lip]))
+    # accelerometer posts on the inside of the top wall, 45 deg ramp on the front side (prints front-down)
     wall_y = CAV_H / 2
     posts = []
     for hx, hz in ACC_HOLES:
         cylp = y_cyl(ACC_POST_R, ACC_POST_L + 0.5, hx, hz).translate((0, wall_y - (ACC_POST_L + 0.5) / 2, 0))
         foot = box(2 * ACC_POST_R, 0.5, 2 * ACC_POST_R + ACC_POST_L, x=hx, y=wall_y + 0.25,
-                   z=hz - ACC_POST_R)
+                   z=hz - ACC_POST_R - ACC_POST_L)
         posts.append(Manifold.batch_hull([cylp, foot]))
     s = s + union(posts)
-    pilots = [y_cyl(ACC_PILOT_R, ACC_POST_L + 1.6, hx, hz).translate((0, wall_y - ACC_POST_L / 2 + 0.3, 0))
-              for hx, hz in ACC_HOLES]
-    return s - union(cuts + pilots)
+    cuts += [y_cyl(ACC_PILOT_R, ACC_POST_L + 1.6, hx, hz).translate((0, wall_y - ACC_POST_L / 2 + 0.3, 0))
+             for hx, hz in ACC_HOLES]
+    return s - union(cuts)
 
 
 def fit_test():
@@ -246,8 +238,34 @@ def lid():
     rim_w, rim_h = CAV_W - 0.4, CAV_H - 0.4
     rim = box(rim_w, rim_h, RIM_D, z=LID_T) - box(rim_w - 2 * RIM_T, rim_h - 2 * RIM_T, RIM_D + 2, z=LID_T - 1)
     parts = [plate, rim]
+    # snap bumps on the rim's long sides: 45 deg catch face toward the plate, shallow ramp toward the rim's tip
+    rim_face = rim_h / 2
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            z0 = LID_T + SNAP_Z0
+            base = rect_box(fx(sx * SNAP_X) - SNAP_W / 2, min(sy * (rim_face - 0.5), sy * rim_face),
+                            fx(sx * SNAP_X) + SNAP_W / 2, max(sy * (rim_face - 0.5), sy * rim_face),
+                            z0, z0 + SNAP_H + SNAP_FLAT + SNAP_RAMP)
+            top = rect_box(fx(sx * SNAP_X) - SNAP_W / 2, min(sy * rim_face, sy * (rim_face + SNAP_H)),
+                           fx(sx * SNAP_X) + SNAP_W / 2, max(sy * rim_face, sy * (rim_face + SNAP_H)),
+                           z0 + SNAP_H, z0 + SNAP_H + SNAP_FLAT)
+            parts.append(Manifold.batch_hull([base, top]))
+    # crush ribs (vertical, chamfered at the tip): 2 per short side, 2 per long side away from the catches
+    rib_z0, rib_z1 = LID_T + 0.8, LID_T + RIM_D - 0.8
+    for sy in (-1, 1):
+        for xx in (-60.0, 60.0):
+            parts.append(rect_box(fx(xx) - 0.5, min(sy * rim_face, sy * (rim_face + RIB_H)), fx(xx) + 0.5,
+                                  max(sy * rim_face, sy * (rim_face + RIB_H)), rib_z0, rib_z1))
+    for sx in (-1, 1):
+        for yy in (-20.0, 20.0):
+            xf = sx * rim_w / 2
+            parts.append(rect_box(min(xf, xf + sx * RIB_H), yy - 0.5, max(xf, xf + sx * RIB_H), yy + 0.5,
+                                  rib_z0, rib_z1))
     for hx, hy in HOLES:                    # board standoffs (M2.5)
         parts.append(cyl(2.4, STANDOFF, fx(hx), hy, LID_T))
+    for x, y in POSTS:                      # panel columns: the panel's back rests on their ends
+        parts.append(cyl(POST_R, POST_LEN, fx(x), y, LID_T))
+        parts.append(cyl(POST_BASE_R, POST_BASE_H, fx(x), y, LID_T))
     # speaker gasket ring: channels sound to the grille, stops 1 mm short of the speaker (no buzz)
     sx0, sy0, sx1, sy1 = SPK
     cx, cy = (sx0 + sx1) / 2, (sy0 + sy1) / 2
@@ -256,20 +274,9 @@ def lid():
     parts.append(box(gw + 2.4, gh + 2.4, ring_h, x=fx(cx), y=cy, z=LID_T) - box(gw, gh, ring_h + 2, x=fx(cx), y=cy, z=LID_T - 1))
     l = union(parts)
     cuts = []
-    for sx in (-1, 1):                      # back-cover screws: countersunk M3 (90 deg), heads flush with the back
-        for sy in (-1, 1):
-            hx, hy = fx(sx * BOSS_X), sy * BOSS_Y
-            cuts.append(cyl(1.7, LID_T + 2, hx, hy, -1))
-            cuts.append(Manifold.cylinder(1.6, 3.3, 1.7, SEG).translate((hx, hy, -0.1)))
-            # rim stops short of the corner bosses
-            cuts.append(box(BOSS + 1.5, BOSS + 1.5, RIM_D + 2, x=fx(sx * (CAV_W / 2 - BOSS / 2)),
-                            y=sy * (CAV_H / 2 - BOSS / 2), z=LID_T))
     cuts += [cyl(1.05, STANDOFF + 2, fx(hx), hy, LID_T - 0.6) for hx, hy in HOLES]  # 2.1 mm pilot for M2.5
-    for x, y in POSTS:                      # panel screws: countersunk M3 through the plate into the pillars
-        cuts.append(cyl(POST_HOLE_R, LID_T + 2, fx(x), y, -1))
-        cuts.append(Manifold.cylinder(1.6, 3.3, 1.7, SEG).translate((fx(x), y, -0.1)))
-        sy = 1 if y > 0 else -1             # rim stops short of each pillar
-        cuts.append(box(TAB_W + 1.5, 2 * RIM_T + 2, RIM_D + 2, x=fx(x), y=sy * (CAV_H / 2 - RIM_T), z=LID_T))
+    cuts += [cyl(POST_HOLE_R, LID_T + POST_LEN + 2, fx(x), y, -1) for x, y in POSTS]   # M3 through the column
+    cuts += [cyl(CBORE_R, CBORE_D + 1, fx(x), y, -1) for x, y in POSTS]                # head recess
     # power cable: a round hole just inside the wall line, with a narrower neck open to the bottom edge to snap
     # the cable through; the rim gets a matching gap so the cable passes into the case
     cr = CABLE_D / 2 + 0.1
@@ -346,8 +353,8 @@ def check():
     bx0, by0, bx1, by1 = BOARD_RECT
     # 1 posts clear the board
     for x, y in POSTS:
-        if bx0 - TAB_W / 2 - 0.5 < x < bx1 + TAB_W / 2 + 0.5 and by0 - TAB_REACH < y < by1 + TAB_REACH:
-            errors.append("panel pillar at (%.0f,%.0f) hits the board" % (x, y))
+        if bx0 - POST_R - 0.5 < x < bx1 + POST_R + 0.5 and by0 - POST_R - 0.5 < y < by1 + POST_R + 0.5:
+            errors.append("panel screw column at (%.0f,%.0f) hits the board" % (x, y))
     # 2 board fits inside the cavity (incl. wheel + USB overhang)
     if by0 < -CAV_H / 2 + 1 or by1 > CAV_H / 2 - 1 or bx0 < -CAV_W / 2 or bx1 > CAV_W / 2:
         errors.append("board outside the cavity")
@@ -374,11 +381,11 @@ def check():
     for x, y in POSTS:
         if abs(x - CABLE_X) < POST_BASE_R + CABLE_D / 2 + 1 and abs(y - CABLE_Y) < POST_BASE_R + CABLE_D / 2 + 1:
             errors.append("power cable exit hits a panel screw column")
-    if abs(abs(CABLE_X) - BOSS_X) < BOSS / 2 + CABLE_D:
-        errors.append("power cable exit hits a corner boss")
-    for x, y in POSTS:
-        if abs(abs(x) - BOSS_X) < BOSS / 2 + POST_BASE_R + 0.5 and abs(abs(y) - BOSS_Y) < BOSS / 2 + POST_BASE_R + 0.5:
-            errors.append("panel screw column hits a corner boss")
+    # 8 snap catches: clear of the cable gap, the accelerometer and the ribs
+    if abs(abs(CABLE_X) - SNAP_X) < SNAP_W / 2 + CABLE_D:
+        errors.append("power cable gap runs into a snap catch")
+    if abs(60.0 - SNAP_X) < SNAP_W / 2 + 2:
+        errors.append("crush ribs sit on a snap catch")
     if not 3.0 <= PANEL_BITE <= 5.5:
         errors.append("panel screw bite %.1f mm (want 3-5.5): change PANEL_SCREW" % PANEL_BITE)
     for x, y in POSTS:
@@ -389,15 +396,9 @@ def check():
         errors.append("accelerometer posts reach the panel (move ACC_Z back)")
     if ACC_HOLES[0][1] + ACC_POST_R + ACC_POST_L > OUT_D - RIM_D - 0.5:
         errors.append("accelerometer post ramps reach the back cover's rim")
-    for x, y in POSTS:                     # tabs vs accelerometer board footprint (top wall)
-        if y > 0 and abs(x - ACC_X) < 10.2 + TAB_W / 2 + 1:
-            errors.append("panel stop tab hits the accelerometer")
-    for x, y in POSTS:                      # pillars vs vents in the back cover
-        for i in range(-7, -2):
-            vx = fx(RIGHT * (i * 9 - 4))
-            for vy in (VENT_Y, -VENT_Y):
-                if abs(fx(x) - vx) < TAB_W / 2 + 2 and CAV_H / 2 - TAB_REACH < abs(vy) + VENT_H / 2 + 1 and y * vy > 0:
-                    errors.append("a back-cover vent opens onto a panel pillar")
+    for x, y in POSTS:                     # columns vs accelerometer board footprint (top wall)
+        if y > 0 and abs(x - ACC_X) < 10.2 + POST_R + 1 and CAV_H / 2 - ACC_POST_L - 1.6 - 8.5 < y + POST_R:
+            errors.append("panel column hits the accelerometer")
     if not (PANEL_BACK_Z + 1 < ACC_Z - 8.05 and ACC_Z + 8.05 < OUT_D - RIM_D - 1):
         errors.append("accelerometer board doesn't fit between the panel and the back cover's rim")
     if ACC_X - 10.2 < bx1 + 3 and ACC_X + 10.2 > bx0 - 3:
@@ -405,7 +406,8 @@ def check():
     if errors:
         raise SystemExit("CHECK FAILED:\n  " + "\n  ".join(errors))
     print("checks ok")
-    print("  panel screws: M3x%d countersunk through back cover + pillar, %.1f mm into the panel's holes" % (PANEL_SCREW, PANEL_BITE))
+    print("  panel screws: M3x%d button head through the back cover's columns, %.1f mm into the panel's holes" % (PANEL_SCREW, PANEL_BITE))
+    print("  snap catches at x +/-%.1f on the long walls: %.1f mm bump, %.1f mm pocket" % (SNAP_X, SNAP_H, POCKET_D))
     print("  board: X %.1f..%.1f (right half seen from the front), Y %.1f..%.1f, speaker side facing the back" % (bx0, bx1, by0, by1))
     print("  board's USB-C %.0f mm in from the right wall; power cable leaves the back cover's bottom edge at x %.0f" %
           (USB_EDGE_GAP, CABLE_X))
