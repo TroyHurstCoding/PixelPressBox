@@ -3,7 +3,9 @@
 #include <JPEGDEC.h>
 #include <PNGdec.h>
 #include <SD.h>
+#include <cmath>
 #include <new>
+#include <algorithm>
 #include <vector>
 #include "render.h"
 #include "tronbyt_assets.h"  // YULE_GIF: Tidbyt's Yule Log (tronbyt/apps, Apache-2.0; video by Pexels)
@@ -172,6 +174,27 @@ int playNextImage(uint32_t dwellMs, int (*wait)(uint32_t)) {
   return r;
 }
 
+// The Yule Log footage is a bright video; on LEDs it looks washed out. Deepen it: a gamma curve pulls the
+// mid-tones down (embers stay dark red, only the flame cores stay bright) and a little extra saturation.
+static uint8_t fireCurve[256];
+static uint16_t fireTone(uint16_t c) {
+  int r = ((c >> 11) & 0x1F) * 255 / 31, g = ((c >> 5) & 0x3F) * 255 / 63, b = (c & 0x1F) * 255 / 31;
+  int l = (r * 3 + g * 6 + b) / 10;  // saturate: push each channel away from the grey level
+  r = std::min(255, std::max(0, l + (r - l) * 13 / 10));
+  g = std::min(255, std::max(0, l + (g - l) * 13 / 10));
+  b = std::min(255, std::max(0, l + (b - l) * 13 / 10));
+  r = fireCurve[r], g = fireCurve[g], b = fireCurve[b];
+  return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+}
+static void fireDraw(GIFDRAW *d) {
+  int y = d->iY + d->y;
+  for (int i = 0; i < d->iWidth; i++) {
+    uint8_t idx = d->pPixels[i];
+    if (d->ucHasTransparency && idx == d->ucTransparent) continue;
+    put(d->iX + i, y, fireTone(d->pPalette[idx]));
+  }
+}
+
 // ---- fireplace: Tidbyt's Yule Log loop (64x32, 150 frames at 100 ms), played from flash
 int playYuleLog(uint32_t dwellMs, int (*wait)(uint32_t)) {
   if (!canvas) canvas = (uint16_t *)ps_malloc(W * H * 2);
@@ -179,7 +202,9 @@ int playYuleLog(uint32_t dwellMs, int (*wait)(uint32_t)) {
   AnimatedGIF *gif = new (ps_malloc(sizeof(AnimatedGIF))) AnimatedGIF();
   gif->begin(GIF_PALETTE_RGB565_LE);
   int r = 0;
-  if (gif->open((uint8_t *)YULE_GIF, sizeof(YULE_GIF), gifDraw)) {
+  if (!fireCurve[255])
+    for (int i = 0; i < 256; i++) fireCurve[i] = (uint8_t)(255.0f * powf(i / 255.0f, 1.9f) + 0.5f);
+  if (gif->open((uint8_t *)YULE_GIF, sizeof(YULE_GIF), fireDraw)) {
     offX = offY = 0;
     memset(canvas, 0, W * H * 2);
     uint32_t t0 = millis();

@@ -20,10 +20,28 @@ def rgb565(r, g, b):
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
 
-def img565(path):
+def img565(path, tone=None):
     im = Image.open(path).convert("RGB")
     w, h = im.size
-    return w, h, [rgb565(*im.getpixel((x, y))) for y in range(h) for x in range(w)]
+    px = [im.getpixel((x, y)) for y in range(h) for x in range(w)]
+    if tone:
+        px = [tone(*p) for p in px]
+    return w, h, [rgb565(*p) for p in px]
+
+
+# Nixie warm ramp: on the LED panel the photo's faint blue/green read as pink, so each pixel is recolored
+# by its brightness: dark red glass -> red -> orange -> pale yellow-hot core. No blue except in the core.
+NIXIE_RAMP = [(0.00, (0, 0, 0)), (0.12, (0, 0, 0)), (0.30, (70, 2, 0)), (0.50, (190, 18, 0)),
+              (0.70, (255, 70, 0)), (0.85, (255, 160, 10)), (1.00, (255, 235, 120))]
+
+
+def nixie_tone(r, g, b):
+    v = min(1.0, (0.62 * r + 0.38 * g) / 255.0 * 1.08)
+    for (a, ca), (b2, cb) in zip(NIXIE_RAMP, NIXIE_RAMP[1:]):
+        if v <= b2:
+            t = 0 if b2 == a else (v - a) / (b2 - a)
+            return tuple(int(ca[i] + (cb[i] - ca[i]) * t) for i in range(3))
+    return NIXIE_RAMP[-1][1]
 
 
 def mask_rows(path):
@@ -61,12 +79,12 @@ def main(root):
     nix = os.path.join(root, "nixelclock/images/round_brighter")
     px = []
     for d in range(10):
-        w, h, p = img565(os.path.join(nix, "%d.png" % d))
+        w, h, p = img565(os.path.join(nix, "%d.png" % d), nixie_tone)
         assert (w, h) == (15, 15)
         px += p
     parts.append("// Nixel Clock tubes by saltedlolly: 10 digits, 15x15 RGB565 each")
     parts.append(arr("NIXEL_DIGITS", "uint16_t", px))
-    w, h, p = img565(os.path.join(nix, "sep.png"))
+    w, h, p = img565(os.path.join(nix, "sep.png"), nixie_tone)
     assert (w, h) == (4, 15)
     parts.append(arr("NIXEL_SEP", "uint16_t", p))
 
