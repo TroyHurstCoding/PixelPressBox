@@ -62,7 +62,7 @@ def main(out):
     # 2 back cover outside: grille, mic holes, vents
     ax = fig.add_subplot(2, 2, 2, projection="3d")
     draw(ax, [(lid_raw, "#55595f", 1.0)], elev=-89, azim=-90,
-         title="Back cover, outside: USB-C panel mount, speaker grille, mics, vents, 4 panel screws")
+         title="Back cover, outside: speaker grille, mic holes, 4 panel screws, cable slot")
     # 3 right side: USB-C window + thumbwheel
     ax = fig.add_subplot(2, 2, 3, projection="3d")
     up = trimesh.transformations.rotation_matrix(np.pi / 2, (1, 0, 0))  # make Y point up

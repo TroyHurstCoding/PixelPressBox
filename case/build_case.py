@@ -20,7 +20,7 @@ Hardware: 4x M3x35 button head (back cover columns -> panel), 4x M2.5x8 (board -
 
 Layout (seen from the FRONT): board in the right half, speaker side facing the back cover.
 Walls: no openings. The power supply's cable plugs into the board and snaps into a slot in the back cover's bottom edge.
-Back cover: speaker grille + speaker gasket ring, two mic holes, vents. Left wall: air intake.
+Back cover: speaker grille + speaker gasket ring, two mic holes, power-cable slot. No vents.
 Board <-> panel: the HUB75 ribbon cable (board header is right-angle, cable heads toward the middle).
 
 Coordinates (right-handed): Y up, Z = depth (front face at 0, back at OUT_D). Facing the display from the
@@ -304,10 +304,6 @@ def lid():
         mx, my = (mx0 + mx1) / 2, (my0 + my1) / 2
         for ox, oy in ((0, 0), (2.2, 0), (-2.2, 0)):
             cuts.append(cyl(0.8, LID_T + 2, fx(mx + ox), my + oy, -1))
-    # vents, away from the board: cool air in along the bottom, warm air out along the top (no wall slots)
-    for i in range(-7, -2):                 # x 31..67: the left side, clear of the board
-        for vy in (VENT_Y, -VENT_Y):
-            cuts.append(box(3.0, VENT_H, LID_T + 2, x=fx(RIGHT * (i * 9 - 4)), y=vy, z=-1))
     return l - union(cuts)
 
 

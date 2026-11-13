@@ -217,8 +217,8 @@ cover. **All four sides are plain**: no screws, no openings, for landscape or po
   board and snaps into a slot in the back cover's bottom edge, on the right side seen from the front. `CABLE_D` in
   `build_case.py` is an estimate (4.0 mm): **measure the cable and rerun before printing the back cover.**
 - The thumbwheel sits inside the case and isn't used; the accelerometer (tap / double-tap) takes over its jobs.
-- **Back cover:** speaker grille with a gasket ring, 2 mic-hole clusters, two rows of vents away from the board
-  (bottom row in, top row out).
+- **Back cover:** speaker grille with a gasket ring and 2 mic-hole clusters. No vents: at desk-clock brightness the
+  panel and board run cool; keep the brightness moderate for screens that stay bright white for hours.
 - **Stand:** 12° lean-back cradle. The front lip is 2 mm tall so it never covers the LEDs; the back lip has a slot
   for the power cable.
 - 32.1 mm of room behind the panel. The board's underside socket ends 11.5 mm from the panel.
