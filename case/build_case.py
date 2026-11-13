@@ -183,9 +183,6 @@ def shell():
     # finger scallop on the outside so the wheel is easy to reach
     # shallow thumb scoop around the slot: a 6 mm-radius cylinder along Y, sunk 1 mm into the outer wall
     cuts.append(y_cyl(6.0, 24.0, RIGHT * (OUT_W / 2 + 5.4), z_of(WHEEL_D)).translate((0, WHEEL_Y, 0)))
-    # air intake, low on the left wall
-    for k in range(4):
-        cuts.append(box(WALL * 4, 3.0, 18, x=-RIGHT * OUT_W / 2, y=-OUT_H / 2 + 10 + k * 6, z=OUT_D - 26))
     return s - union(cuts)
 
 
@@ -230,9 +227,10 @@ def lid():
         mx, my = (mx0 + mx1) / 2, (my0 + my1) / 2
         for ox, oy in ((0, 0), (2.2, 0), (-2.2, 0)):
             cuts.append(cyl(0.8, LID_T + 2, fx(mx + ox), my + oy, -1))
-    # hot-air vents across the top, away from the board
+    # vents, away from the board: cool air in along the bottom, warm air out along the top (no wall slots)
     for i in range(-7, 2):
-        cuts.append(box(3.0, VENT_H, LID_T + 2, x=fx(RIGHT * (i * 9 - 4)), y=VENT_Y, z=-1))
+        for vy in (VENT_Y, -VENT_Y):
+            cuts.append(box(3.0, VENT_H, LID_T + 2, x=fx(RIGHT * (i * 9 - 4)), y=vy, z=-1))
     return l - union(cuts)
 
 

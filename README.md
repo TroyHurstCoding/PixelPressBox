@@ -207,8 +207,8 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
   A HUB75 ribbon runs from the board to the panel.
 - **Right wall:** the USB-C window (12.5 × 8 mm) and, above it, the thumbwheel slot with a thumb scoop. The wheel
   sticks out about 2 mm.
-- **Back cover:** speaker grille with a gasket ring, 2 mic-hole clusters, vents over the side away from the board.
-- **Left wall:** air-intake slots.
+- **Back cover:** speaker grille with a gasket ring, 2 mic-hole clusters, and two rows of vents on the side away
+  from the board (bottom row lets cool air in, top row lets warm air out). The shell's walls have no slots.
 - 4 screw columns on the back cover line up with the panel's corner holes (126.2 × 66.3 mm center to center).
 - 32.1 mm of room behind the panel. The board's underside socket ends 11.5 mm from the panel.
 
