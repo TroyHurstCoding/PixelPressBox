@@ -221,7 +221,7 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
 | `lid.stl` (back cover) | Outside face down | Standoffs point up, no supports |
 | `stand.stl` | Flat | 12° desk cradle |
 
-**Print settings:** PLA, 0.2 mm layers, 5 walls on the shell (3 is fine elsewhere), 20% infill.
+**Print settings:** see [`case/PRINT_SETTINGS.md`](case/PRINT_SETTINGS.md) (Ender-3 S1 Pro, tuned for smooth sides).
 
 **Hardware and threads:** nothing needs tapping or inserts.
 - 4× M3×35 button head (back cover → panel): the panel's corner holes are already threaded metal.
