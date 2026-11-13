@@ -10,7 +10,7 @@ Parts (print orientation):
   shell.stl     black PLA   front edge DOWN, no supports. Slicer: 5 wall lines (makes the 2 mm wall solid)
   lid.stl       black PLA   flat, standoffs up, no supports
   stand.stl     black PLA   as exported
-  fit_test_ring.stl         the shell's first 6 mm: print it first and push the panel in to check the fit
+  fit_test.stl              front ring + right-wall tab (USB-C, wheel) + top-wall tab (accelerometer posts)
 
 The panel sits FLUSH with the shell's front edge: no lip, no louver, no diffuser. The shell is an open frame
 2 mm wide around the panel (0.3 mm gap). The lid's 4 columns are the panel's stop: the M3 screws pull the
@@ -208,6 +208,17 @@ def shell():
     return s - union(cuts + pilots)
 
 
+def fit_test():
+    """Quick test print, cut from the real shell: a 10 mm front ring (panel fit) plus two full-depth tabs of wall,
+    the right wall around the USB-C window and thumbwheel slot, and the top wall with the accelerometer posts."""
+    big = OUT_D + 2
+    keep = [box(OUT_W + 2, OUT_H + 2, 10.0, z=-1)]                                        # front ring
+    keep.append(rect_box(-OUT_W / 2 - 2, -18, -CAV_W / 2 + 0.01, 28, -1, big))             # right wall tab
+    keep.append(rect_box(18, CAV_H / 2 - 0.01, 52, OUT_H / 2 + 2, -1, big))               # top wall tab
+    keep.append(rect_box(18, CAV_H / 2 - ACC_POST_L - 1, 52, CAV_H / 2, 15, big))          # ...and its posts
+    return shell() ^ union(keep)
+
+
 def lid():
     """Modeled seen from the back: plate on the bed (z=0), features rise toward the panel (z = LID_T + d)."""
     plate = rounded_slab(OUT_W, OUT_H, LID_T, CORNER_R)
@@ -365,8 +376,7 @@ def main():
     os.makedirs(out, exist_ok=True)
     for name, fn in (("shell", shell), ("lid", lid), ("stand", stand)):
         save(fn(), os.path.join(out, name + ".stl"))
-    # 6 mm slice of the shell's front edge: a 20-minute print to check the panel's fit before the long print
-    save(shell().trim_by_plane((0, 0, -1), -6.0), os.path.join(out, "fit_test_ring.stl"))
+    save(fit_test(), os.path.join(out, "fit_test.stl"))
     print("\nOuter size: %.1f x %.1f mm front, %.1f mm deep + %.1f mm back cover" % (OUT_W, OUT_H, OUT_D, LID_T))
 
 

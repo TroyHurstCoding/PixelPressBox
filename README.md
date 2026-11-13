@@ -216,7 +216,7 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
 
 | Part | Print orientation | Notes |
 | --- | --- | --- |
-| `fit_test_ring.stl` | Front edge down | The shell's first 6 mm (~20 min). Push the panel in: it should slide in with a hair of play |
+| `fit_test.stl` | Front edge down | A 10 mm front ring plus two full-depth wall tabs: right wall (USB-C window, wheel slot) and top wall (accelerometer posts). Checks the panel fit, port alignment (with the back cover in) and the accelerometer |
 | `shell.stl` | Front edge down | No supports. Set **5 wall lines** so the 2 mm wall prints solid |
 | `lid.stl` (back cover) | Outside face down | Standoffs point up, no supports |
 | `stand.stl` | Flat | 12° desk cradle |
@@ -280,7 +280,7 @@ Edit the numbers at the top of `board_model.py`, re-run it, and the case gets de
 
 ## To-do / later
 - [ ] **Measure the panel thickness** when it arrives → set `PANEL_D` in `case/build_case.py`, re-run.
-- [ ] **Test-fit print** (`fit_test_ring.stl`, ~20 min) before the full shell print.
+- [ ] **Test-fit print** (`fit_test.stl`) before the full shell print.
 - [ ] Team logos (16×16 pixel art from the SD card).
 - [ ] Voice commands (ESP-SR on the board's two mics): "next", "start focus", "what's next".
 - [ ] Keyhole slots for wall mounting (if it ever goes on a wall).

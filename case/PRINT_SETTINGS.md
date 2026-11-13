@@ -3,7 +3,9 @@
 Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 
 ## Order
-1. `fit_test_ring.stl` (about 20 min). Press the panel into it: it should slide in with a hair of play.
+1. `fit_test.stl` (about 1 to 1.5 h). A 10 mm front ring plus two full-depth tabs cut from the real shell:
+   the right wall (USB-C window, wheel slot) and the top wall (accelerometer posts). Press the panel in (a hair of
+   play), screw the accelerometer on, and set the back cover in with the board on it to check the USB-C and wheel.
 2. `shell.stl`, front edge down, no supports.
 3. `lid.stl` (back cover), outside face down, no supports.
 4. `stand.stl`, as exported.
