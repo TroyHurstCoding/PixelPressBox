@@ -15,7 +15,7 @@ Parts (print orientation):
 The panel sits FLUSH with the shell's front edge: no lip, no louver, no diffuser. The shell is an open frame
 2 mm wide around the panel (0.3 mm gap). The lid's 4 columns are the panel's stop: the M3 screws pull the
 panel back against them, so column length (from PANEL_D) decides flushness. Measure the panel's thickness.
-Hardware: 4x M3x8 (lid -> shell), 4x M2.5x8 (board -> lid standoffs),
+Hardware: 4x M3x8 countersunk/flat head (back cover -> shell corner bosses), 4x M2.5x8 (board -> lid standoffs),
           4x M3 button head through the lid columns into the panel's corner holes (length printed by check())
 
 Layout (seen from the FRONT): board in the right half, speaker side facing the back cover.
@@ -51,7 +51,10 @@ LID_T = 2.4
 CORNER_R = 3.0            # outer corner radius (keeps >= 1.5 mm of wall at the corners)
 RIM_T, RIM_D = 2.0, 6.0
 STAND_ANGLE = 12.0
-SCREW_X = 25.0            # lid screws (top + bottom walls) at +/- this X
+# Back cover -> shell: 4 countersunk M3x8 from the back into bosses in the shell's inner corners. No screws in any
+# side wall, so all four sides stay flat (portrait or landscape).
+BOSS = 8.0                # corner boss size (square, in the corner of the cavity)
+BOSS_D = 10.0             # boss depth from the back edge
 PANEL_PARTS_H = 17.0      # tallest thing on the panel's back: HUB75 IN header + plugged ribbon + bend
 BOARD_UNDER = 3.0         # board underside SMD parts (the 8.5 mm socket is checked separately)
 
@@ -68,6 +71,7 @@ CABLE_SNAP = 0.6          # slot entry this much narrower than the cable, so it 
 
 # derived
 CAV_W, CAV_H = PANEL_W + 2 * CLR, PANEL_H + 2 * CLR
+BOSS_X, BOSS_Y = CAV_W / 2 - BOSS / 2, CAV_H / 2 - BOSS / 2   # back-cover screw positions
 OUT_W, OUT_H = CAV_W + 2 * WALL, CAV_H + 2 * WALL
 BOT_H = SPEC["envelope"]["tallest_bottom"]
 # room behind the panel: board stack + clearance over the panel's own connectors
@@ -75,7 +79,6 @@ BOT_H = SPEC["envelope"]["tallest_bottom"]
 BACK_SPACE = max(STANDOFF + PCB["t"] + BOARD_UNDER + PANEL_PARTS_H, STANDOFF + PCB["t"] + BOT_H + 3.0)
 OUT_D = FLUSH + PANEL_D + BACK_SPACE
 PANEL_BACK_Z = FLUSH + PANEL_D
-SCREW_Z = OUT_D - 3.5
 RIGHT = -1                               # -X is the right side when you face the display
 BX1 = CAV_W / 2 - USB_EDGE_GAP           # distance from center to the board's USB edge (board x = 0)
 SEG = 40
@@ -185,7 +188,23 @@ def shell():
     body = Manifold.batch_hull([rounded_slab(OUT_W - 2 * c, OUT_H - 2 * c, 0.01, CORNER_R - c),
                                 rounded_slab(OUT_W, OUT_H, OUT_D - c, CORNER_R, z=c)])
     s = body - box(CAV_W, CAV_H, OUT_D + 2, z=-1)   # open front: the panel fills the whole opening
-    cuts = [y_cyl(1.7, OUT_H + 2, sx, SCREW_Z) for sx in (-SCREW_X, SCREW_X)]   # back-cover screws only
+    cuts = []
+    # corner bosses for the back-cover screws, flush with the back edge. Their underside is a 45 deg slope toward
+    # the walls so the shell still prints front-down without supports.
+    bosses = []
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cx, cy = sx * CAV_W / 2, sy * CAV_H / 2                  # the cavity corner
+            blk = rect_box(min(cx, cx - sx * BOSS), min(cy, cy - sy * BOSS), max(cx, cx - sx * BOSS),
+                           max(cy, cy - sy * BOSS), OUT_D - BOSS_D, OUT_D)
+            z0 = OUT_D - BOSS_D - BOSS
+            strip_a = rect_box(min(cx, cx - sx * BOSS), min(cy, cy - sy * 0.5), max(cx, cx - sx * BOSS),
+                               max(cy, cy - sy * 0.5), z0, z0 + 0.1)
+            strip_b = rect_box(min(cx, cx - sx * 0.5), min(cy, cy - sy * BOSS), max(cx, cx - sx * 0.5),
+                               max(cy, cy - sy * BOSS), z0, z0 + 0.1)
+            bosses.append(Manifold.batch_hull([blk, strip_a, strip_b]))
+            cuts.append(cyl(1.3, BOSS_D + 1, sx * BOSS_X, sy * BOSS_Y, OUT_D - BOSS_D + 1))   # 2.6 mm M3 pilot
+    s = s + union(bosses)
     # accelerometer posts on the inside of the top wall. The shell prints front-down, so each post gets a 45 deg
     # ramp on its front side and needs no supports.
     wall_y = CAV_H / 2
@@ -212,9 +231,6 @@ def lid():
     rim_w, rim_h = CAV_W - 0.4, CAV_H - 0.4
     rim = box(rim_w, rim_h, RIM_D, z=LID_T) - box(rim_w - 2 * RIM_T, rim_h - 2 * RIM_T, RIM_D + 2, z=LID_T - 1)
     parts = [plate, rim]
-    for sx in (-SCREW_X, SCREW_X):          # lid-screw bosses
-        for sy in (-1, 1):
-            parts.append(box(8, 4, RIM_D, x=fx(sx), y=sy * (rim_h / 2 - RIM_T - 2.0), z=LID_T))
     for hx, hy in HOLES:                    # board standoffs (M2.5)
         parts.append(cyl(2.4, STANDOFF, fx(hx), hy, LID_T))
     for x, y in POSTS:                     # panel screw columns: the panel's back rests on their ends
@@ -227,7 +243,15 @@ def lid():
     gw, gh = 33.0, 25.0
     parts.append(box(gw + 2.4, gh + 2.4, ring_h, x=fx(cx), y=cy, z=LID_T) - box(gw, gh, ring_h + 2, x=fx(cx), y=cy, z=LID_T - 1))
     l = union(parts)
-    cuts = [y_cyl(1.3, OUT_H + 2, fx(sx), LID_T + (OUT_D - SCREW_Z)) for sx in (-SCREW_X, SCREW_X)]
+    cuts = []
+    for sx in (-1, 1):                      # back-cover screws: countersunk M3 (90 deg), heads flush with the back
+        for sy in (-1, 1):
+            hx, hy = fx(sx * BOSS_X), sy * BOSS_Y
+            cuts.append(cyl(1.7, LID_T + 2, hx, hy, -1))
+            cuts.append(Manifold.cylinder(1.6, 3.3, 1.7, SEG).translate((hx, hy, -0.1)))
+            # rim stops short of the corner bosses
+            cuts.append(box(BOSS + 1.5, BOSS + 1.5, RIM_D + 2, x=fx(sx * (CAV_W / 2 - BOSS / 2)),
+                            y=sy * (CAV_H / 2 - BOSS / 2), z=LID_T))
     cuts += [cyl(1.05, STANDOFF + 2, fx(hx), hy, LID_T - 0.6) for hx, hy in HOLES]  # 2.1 mm pilot for M2.5
     cuts += [cyl(POST_HOLE_R, LID_T + POST_LEN + 2, fx(x), y, -1) for x, y in POSTS]   # M3 through the column
     cuts += [cyl(CBORE_R, CBORE_D + 1, fx(x), y, -1) for x, y in POSTS]                # head recess
@@ -337,8 +361,11 @@ def check():
     for x, y in POSTS:
         if abs(x - CABLE_X) < POST_BASE_R + CABLE_D / 2 + 1 and abs(y - CABLE_Y) < POST_BASE_R + CABLE_D / 2 + 1:
             errors.append("power cable exit hits a panel screw column")
-    if abs(CABLE_X - (-SCREW_X if RIGHT < 0 else SCREW_X)) < 8:
-        errors.append("power cable exit hits a back-cover screw boss")
+    if abs(abs(CABLE_X) - BOSS_X) < BOSS / 2 + CABLE_D:
+        errors.append("power cable exit hits a corner boss")
+    for x, y in POSTS:
+        if abs(abs(x) - BOSS_X) < BOSS / 2 + POST_BASE_R + 0.5 and abs(abs(y) - BOSS_Y) < BOSS / 2 + POST_BASE_R + 0.5:
+            errors.append("panel screw column hits a corner boss")
     if not 3.0 <= PANEL_BITE <= 5.5:
         errors.append("panel screw bite %.1f mm (want 3-5.5): change PANEL_SCREW or CBORE_D" % PANEL_BITE)
     for x, y in POSTS:

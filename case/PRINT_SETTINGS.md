@@ -35,7 +35,7 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 
 ## Screws (no tapping or inserts needed)
 - 4x M3x35 button head: back cover into the panel's threaded corner holes.
-- 4x M3x8: through the shell's top and bottom walls into the back cover. They cut their own threads.
+- 4x M3x8 countersunk (flat head): back cover corners into the shell's corner bosses, heads flush. They cut their own threads.
 - 2x M3x8: accelerometer onto its two posts inside the shell's top wall. They cut their own threads.
 - 4x M2.5x8: board onto the standoffs. They cut their own threads.
 - Drive the self-cutting screws slowly the first time and don't overtighten.
