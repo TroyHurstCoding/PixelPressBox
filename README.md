@@ -201,11 +201,12 @@ A 0.5 mm bevel softens the outer front edge. **All four sides are plain**: the b
 in from the back (countersunk, flush) into bosses in the shell's inner corners, sloped underneath so the shell still
 prints without supports. Cut-away: `case/lid_screws.png`.
 
-**Panel stop tabs:** 4 tabs reach in from the shell's top and bottom walls right behind the panel, one at each panel
-screw. The panel rests on them and the M3×35 screws (through the back cover's columns, which now only guide them)
-pull it tight against them, so the panel is held by the shell at the front and the back cover by the corner screws:
-nothing rattles. **To service it, take out the 4 panel screws from the back and the panel comes out the front**,
-back cover still on. Cut-away: `case/panel_tabs.png`. The shell's 4 stop tabs set the panel's depth, so `PANEL_D` (its thickness) decides how flush it sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, and rerun.
+**Panel pillars:** 4 solid pillars, fused to the shell's top and bottom walls, run from right behind the panel to the
+shell's back edge, one at each of the panel's corner holes. The panel rests flat on their front faces and the back
+cover rests flat on their back faces. One **M3×40 countersunk** screw per pillar goes through the back cover and the
+pillar into the panel, so back cover, shell and panel clamp together as one piece and nothing rattles. **To service
+it, take those 4 screws out from the back and the panel comes out the front**, back cover still on. The pillars
+stand on the bed when the shell prints back-edge down, so they need no supports. Cut-away: `case/panel_tabs.png`. The shell's 4 pillars set the panel's depth, so `PANEL_D` (its thickness) decides how flush it sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, and rerun.
 `FLUSH = 0.3` would sink the panel 0.3 mm to protect the edge LEDs from knocks.
 
 **Layout (as seen from the front):**
@@ -229,14 +230,15 @@ back cover still on. Cut-away: `case/panel_tabs.png`. The shell's 4 stop tabs se
 | Part | Print orientation | Notes |
 | --- | --- | --- |
 | `fit_test.stl` | Front edge down | The shell's first 10 mm (~30 min). Push the panel in: it should slide in with a hair of play |
-| `shell.stl` | **Back edge down** | No supports (the tabs, corner bosses and accelerometer posts all slope toward the bed). Set **5 wall lines** so the 2 mm wall prints solid |
+| `shell.stl` | **Back edge down** | No supports (the pillars and corner bosses stand on the bed; the accelerometer posts slope toward it). Set **5 wall lines** so the 2 mm wall prints solid |
 | `lid.stl` (back cover) | Outside face down | Standoffs point up, no supports |
 | `stand.stl` | Flat | 12° desk cradle |
 
 **Print settings:** see [`case/PRINT_SETTINGS.md`](case/PRINT_SETTINGS.md) (Ender-3 S1 Pro, tuned for smooth sides).
 
 **Hardware and threads:** nothing needs tapping or inserts.
-- 4× M3×35 button head (back cover → panel): the panel's corner holes are already threaded metal.
+- 4× **M3×40 countersunk (flat head)** (back cover → shell pillars → panel): the panel's corner holes are already
+  threaded metal. The screw reaches 5.5 mm into them; check the holes are at least that deep.
 - 2× M3×8 (accelerometer → posts in the shell's top wall), self-tapping like the others below.
 - 4× **M3×8 countersunk (flat head)** (back cover → the shell's 4 corner bosses): the heads sit flush in the back
   cover, and no screw shows on any side wall, so every side is flat for landscape or portrait. These and the
@@ -248,8 +250,8 @@ back cover still on. Cut-away: `case/panel_tabs.png`. The shell's 4 stop tabs se
 1. Screw the board to the back cover's standoffs, with the speaker facing the grille.
 2. Plug the ribbon into the board, then into the panel's input socket; plug in the panel power cable.
 3. Screw the back cover onto the shell (4 countersunk M3×8 through its corners into the shell's corner bosses).
-4. Push the panel in from the front until it sits on the 4 tabs, and drive the 4 M3×35 screws from the back,
-   through the back cover's columns and the tabs, into the panel.
+4. Push the panel in from the front until it sits on the 4 pillars, and drive the 4 M3×40 countersunk screws from
+   the back, through the back cover and the pillars, into the panel.
 5. Plug USB-C in from the right side.
 
 **Accelerometer (ADXL345):** hangs from 2 posts on the inside of the shell's top wall, left half (seen from the

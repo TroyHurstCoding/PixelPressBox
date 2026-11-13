@@ -4,8 +4,8 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 
 ## Order
 1. `fit_test.stl` (about 30 min, front edge down): the shell's front 10 mm. Press the panel in: it should slide in with a hair of play.
-2. `shell.stl`, **back edge down**, no supports. The panel tabs, corner bosses and accelerometer posts all slope
-   toward the bed.
+2. `shell.stl`, **back edge down**, no supports. The panel pillars and corner bosses stand on the bed; the
+   accelerometer posts slope toward it.
 3. `lid.stl` (back cover), outside face down, no supports. Measure the power cable first and set `CABLE_D`.
 4. `stand.stl`, as exported.
 
@@ -36,7 +36,7 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 - The shell's walls have no openings, so there's nothing to clean up on the sides.
 
 ## Screws (no tapping or inserts needed)
-- 4x M3x35 button head: back cover into the panel's threaded corner holes.
+- 4x M3x40 countersunk (flat head): back cover, through the shell's pillars, into the panel's threaded corner holes.
 - 4x M3x8 countersunk (flat head): back cover corners into the shell's corner bosses, heads flush. They cut their own threads.
 - 2x M3x8: accelerometer onto its two posts inside the shell's top wall. They cut their own threads.
 - 4x M2.5x8: board onto the standoffs. They cut their own threads.

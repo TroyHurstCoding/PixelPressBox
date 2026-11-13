@@ -15,8 +15,8 @@ Parts (print orientation):
 The panel sits FLUSH with the shell's front edge: no lip, no louver, no diffuser. The shell is an open frame
 2 mm wide around the panel (0.3 mm gap). The lid's 4 columns are the panel's stop: the M3 screws pull the
 panel back against them, so column length (from PANEL_D) decides flushness. Measure the panel's thickness.
-Hardware: 4x M3x8 countersunk/flat head (back cover -> shell corner bosses), 4x M2.5x8 (board -> lid standoffs),
-          4x M3 button head through the lid columns into the panel's corner holes (length printed by check())
+Hardware: 4x M3x8 countersunk (back cover -> shell corner bosses), 4x M2.5x8 (board -> lid standoffs),
+          4x M3x40 countersunk (back cover -> shell pillars -> panel's corner holes)
 
 Layout (seen from the FRONT): board in the right half, speaker side facing the back cover.
 Walls: no openings. The power supply's cable plugs into the board and snaps into a slot in the back cover's bottom edge.
@@ -133,24 +133,20 @@ ACC_HOLE_DX, ACC_HOLE_OFF = 15.5, 5.75   # hole spacing; hole row 5.75 mm from t
 ACC_POST_L, ACC_POST_R = 5.5, 3.0        # posts stand 5.5 mm off the wall (clears the 1.4 mm pin stubs)
 ACC_PILOT_R = 1.3                         # 2.6 mm pilot, 6.6 mm deep: an M3x8 bites 6.4 mm; 0.9 mm skin outside
 ACC_HOLES = [(ACC_X - ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF), (ACC_X + ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF)]
-POST_R = 3.3              # column radius (1.6 mm wall around an M3 clearance hole)
 POST_HOLE_R = 1.7         # M3 clearance
-PANEL_SCREW = 35          # M3x35 button head, from the back
-CBORE_R, CBORE_D = 3.1, 4.0   # head recess (6.2 mm, fits a 5.7 mm button head)
-POST_BASE_R, POST_BASE_H = 4.3, 6.0   # thicker column foot so the recess has walls
+PANEL_SCREW = 40          # M3x40 countersunk (flat head), from the back
+POST_BASE_R = 5.0         # keep-out radius around each panel screw (for the checks)
 POSTS = [(-PX, PY), (PX, PY), (-PX, -PY), (PX, -PY)]
 CABLE_Y = -CAV_H / 2 + 2.3 + CABLE_D / 2   # cable center: just inside the lid's rim, close to the bottom edge
-# Panel stop tabs: one per panel screw, reaching in from the shell's top/bottom wall right behind the panel. The
-# panel's back rests on them and the M3x35 screws pull it tight against them, so the panel is held by the SHELL:
-# take the 4 screws out from the back and the panel comes out the front, back cover still on. The tab's back is
-# a 45 deg slope down to the wall (the shell prints back-edge down, so the slope faces the bed: no supports).
-TAB_W, TAB_T = 10.0, 3.0                  # width along the wall; thickness at the tip
+# Panel pillars: one per panel screw, a solid block fused to the shell's top/bottom wall that runs from right behind
+# the panel all the way to the back edge. The panel rests on its front face; the back cover rests flat on its back
+# face (flush with the shell's back edge, like the corner bosses). One M3x40 countersunk screw per pillar goes
+# through the back cover and the pillar into the panel, so back cover + shell + panel clamp together as one piece.
+# To service: take those 4 screws out from the back and the panel comes out the front. The shell prints back-edge
+# down, so the pillars stand on the bed: no overhangs.
+TAB_W = 10.0                              # pillar width along the wall
 TAB_REACH = (CAV_H / 2 - PY) + 4.5        # wall -> 4.5 mm past the screw
-def tab_back_z(d):                        # z of the tab's back face at distance d from the wall
-    return PANEL_BACK_Z + TAB_T + max(TAB_REACH - d, 0.0)
-# lid columns now only guide the screws: they stop 0.5 mm short of the tab's sloped back
-POST_LEN = OUT_D - tab_back_z((CAV_H / 2 - PY) - POST_R) - 0.5
-PANEL_BITE = PANEL_SCREW - (OUT_D + LID_T - CBORE_D - PANEL_BACK_Z)
+PANEL_BITE = PANEL_SCREW - (OUT_D + LID_T - PANEL_BACK_Z)   # flat head: its top sits flush with the back cover
 VENT_H, VENT_Y = 12.0, OUT_H / 2 - 23     # top vents end below the upper screw columns
 
 
@@ -214,19 +210,14 @@ def shell():
             bosses.append(Manifold.batch_hull([blk, strip_a, strip_b]))
             cuts.append(cyl(1.3, BOSS_D + 1, sx * BOSS_X, sy * BOSS_Y, OUT_D - BOSS_D + 1))   # 2.6 mm M3 pilot
     s = s + union(bosses)
-    # panel stop tabs (see TAB_* above): flat front face, sloped back, M3 clearance hole
+    # panel pillars (see above): flat front face on the panel, flat back face flush with the back edge
     tabs, tab_holes = [], []
     for x, y in POSTS:
         sy = 1 if y > 0 else -1
-        wy = sy * CAV_H / 2
-        tip_y = wy - sy * TAB_REACH
-        prism = Manifold.batch_hull([
-            rect_box(x - TAB_W / 2, min(wy, tip_y), x + TAB_W / 2, max(wy, tip_y), PANEL_BACK_Z, PANEL_BACK_Z + TAB_T),
-            rect_box(x - TAB_W / 2, min(wy, wy - sy * 0.5), x + TAB_W / 2, max(wy, wy - sy * 0.5),
-                     PANEL_BACK_Z, tab_back_z(0.0))])
-        tabs.append(prism + rect_box(x - TAB_W / 2, min(wy, wy + sy * 0.5), x + TAB_W / 2, max(wy, wy + sy * 0.5),
-                                     PANEL_BACK_Z, tab_back_z(0.0)))   # fused into the wall
-        tab_holes.append(cyl(POST_HOLE_R, 40, x, y, PANEL_BACK_Z - 1))
+        wy = sy * (CAV_H / 2 + 0.5)                       # 0.5 into the wall so it fuses
+        tip_y = sy * (CAV_H / 2 - TAB_REACH)
+        tabs.append(rect_box(x - TAB_W / 2, min(wy, tip_y), x + TAB_W / 2, max(wy, tip_y), PANEL_BACK_Z, OUT_D))
+        tab_holes.append(cyl(POST_HOLE_R, OUT_D, x, y, PANEL_BACK_Z - 1))
     s = s + union(tabs)
     cuts += tab_holes
     # accelerometer posts on the inside of the top wall. The shell prints back-edge down, so each post gets a
@@ -257,9 +248,6 @@ def lid():
     parts = [plate, rim]
     for hx, hy in HOLES:                    # board standoffs (M2.5)
         parts.append(cyl(2.4, STANDOFF, fx(hx), hy, LID_T))
-    for x, y in POSTS:                     # panel screw columns: the panel's back rests on their ends
-        parts.append(cyl(POST_R, POST_LEN, fx(x), y, LID_T))
-        parts.append(cyl(POST_BASE_R, POST_BASE_H, fx(x), y, LID_T))
     # speaker gasket ring: channels sound to the grille, stops 1 mm short of the speaker (no buzz)
     sx0, sy0, sx1, sy1 = SPK
     cx, cy = (sx0 + sx1) / 2, (sy0 + sy1) / 2
@@ -277,8 +265,11 @@ def lid():
             cuts.append(box(BOSS + 1.5, BOSS + 1.5, RIM_D + 2, x=fx(sx * (CAV_W / 2 - BOSS / 2)),
                             y=sy * (CAV_H / 2 - BOSS / 2), z=LID_T))
     cuts += [cyl(1.05, STANDOFF + 2, fx(hx), hy, LID_T - 0.6) for hx, hy in HOLES]  # 2.1 mm pilot for M2.5
-    cuts += [cyl(POST_HOLE_R, LID_T + POST_LEN + 2, fx(x), y, -1) for x, y in POSTS]   # M3 through the column
-    cuts += [cyl(CBORE_R, CBORE_D + 1, fx(x), y, -1) for x, y in POSTS]                # head recess
+    for x, y in POSTS:                      # panel screws: countersunk M3 through the plate into the pillars
+        cuts.append(cyl(POST_HOLE_R, LID_T + 2, fx(x), y, -1))
+        cuts.append(Manifold.cylinder(1.6, 3.3, 1.7, SEG).translate((fx(x), y, -0.1)))
+        sy = 1 if y > 0 else -1             # rim stops short of each pillar
+        cuts.append(box(TAB_W + 1.5, 2 * RIM_T + 2, RIM_D + 2, x=fx(x), y=sy * (CAV_H / 2 - RIM_T), z=LID_T))
     # power cable: a round hole just inside the wall line, with a narrower neck open to the bottom edge to snap
     # the cable through; the rim gets a matching gap so the cable passes into the case
     cr = CABLE_D / 2 + 0.1
@@ -355,10 +346,8 @@ def check():
     bx0, by0, bx1, by1 = BOARD_RECT
     # 1 posts clear the board
     for x, y in POSTS:
-        if bx0 - POST_R - 0.5 < x < bx1 + POST_R + 0.5 and by0 - POST_R - 0.5 < y < by1 + POST_R + 0.5:
-            errors.append("panel screw column at (%.0f,%.0f) hits the board" % (x, y))
-        if abs(y) - POST_R < VENT_Y + VENT_H / 2 + 1 and y > 0 and -8 < x < 72:
-            errors.append("panel screw column at (%.0f,%.0f) hits the vents" % (x, y))
+        if bx0 - TAB_W / 2 - 0.5 < x < bx1 + TAB_W / 2 + 0.5 and by0 - TAB_REACH < y < by1 + TAB_REACH:
+            errors.append("panel pillar at (%.0f,%.0f) hits the board" % (x, y))
     # 2 board fits inside the cavity (incl. wheel + USB overhang)
     if by0 < -CAV_H / 2 + 1 or by1 > CAV_H / 2 - 1 or bx0 < -CAV_W / 2 or bx1 > CAV_W / 2:
         errors.append("board outside the cavity")
@@ -391,7 +380,7 @@ def check():
         if abs(abs(x) - BOSS_X) < BOSS / 2 + POST_BASE_R + 0.5 and abs(abs(y) - BOSS_Y) < BOSS / 2 + POST_BASE_R + 0.5:
             errors.append("panel screw column hits a corner boss")
     if not 3.0 <= PANEL_BITE <= 5.5:
-        errors.append("panel screw bite %.1f mm (want 3-5.5): change PANEL_SCREW or CBORE_D" % PANEL_BITE)
+        errors.append("panel screw bite %.1f mm (want 3-5.5): change PANEL_SCREW" % PANEL_BITE)
     for x, y in POSTS:
         if bx0 - POST_BASE_R < x < bx1 + POST_BASE_R and by0 - POST_BASE_R < y < by1 + POST_BASE_R:
             errors.append("screw column foot at (%.0f,%.0f) reaches under the board" % (x, y))
@@ -403,8 +392,12 @@ def check():
     for x, y in POSTS:                     # tabs vs accelerometer board footprint (top wall)
         if y > 0 and abs(x - ACC_X) < 10.2 + TAB_W / 2 + 1:
             errors.append("panel stop tab hits the accelerometer")
-    if POST_LEN < 8:
-        errors.append("lid columns too short to guide the screws")
+    for x, y in POSTS:                      # pillars vs vents in the back cover
+        for i in range(-7, -2):
+            vx = fx(RIGHT * (i * 9 - 4))
+            for vy in (VENT_Y, -VENT_Y):
+                if abs(fx(x) - vx) < TAB_W / 2 + 2 and CAV_H / 2 - TAB_REACH < abs(vy) + VENT_H / 2 + 1 and y * vy > 0:
+                    errors.append("a back-cover vent opens onto a panel pillar")
     if not (PANEL_BACK_Z + 1 < ACC_Z - 8.05 and ACC_Z + 8.05 < OUT_D - RIM_D - 1):
         errors.append("accelerometer board doesn't fit between the panel and the back cover's rim")
     if ACC_X - 10.2 < bx1 + 3 and ACC_X + 10.2 > bx0 - 3:
@@ -412,8 +405,7 @@ def check():
     if errors:
         raise SystemExit("CHECK FAILED:\n  " + "\n  ".join(errors))
     print("checks ok")
-    print("  panel screws: M3x%d button head, %.1f mm into the panel's holes; panel rests on 4 shell tabs" % (PANEL_SCREW, PANEL_BITE))
-    print("  lid columns %.1f mm (screw guides), tabs %.1f mm thick at the screw" % (POST_LEN, tab_back_z(CAV_H / 2 - PY) - PANEL_BACK_Z))
+    print("  panel screws: M3x%d countersunk through back cover + pillar, %.1f mm into the panel's holes" % (PANEL_SCREW, PANEL_BITE))
     print("  board: X %.1f..%.1f (right half seen from the front), Y %.1f..%.1f, speaker side facing the back" % (bx0, bx1, by0, by1))
     print("  board's USB-C %.0f mm in from the right wall; power cable leaves the back cover's bottom edge at x %.0f" %
           (USB_EDGE_GAP, CABLE_X))
