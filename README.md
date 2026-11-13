@@ -205,11 +205,14 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
 **Layout (as seen from the front):**
 - The board screws onto 4 standoffs on the back cover, toward the right, 35 mm in from the right wall, with the
   speaker side facing the back. A HUB75 ribbon runs from the board to the panel.
-- **Walls:** no openings at all. Power comes in through a **panel-mount USB-C extension** (e.g. SparkFun
-  CAB-15455, 6", M3 screws 18 mm apart): its female end screws to the back cover on the right side, its male end
-  plugs into the board's USB-C. The thumbwheel now sits inside the case and isn't used; the accelerometer
-  (tap / double-tap) takes over its jobs. **Check the connector body against `PM_BODY` in `build_case.py`
-  before printing the back cover.**
+- **Walls:** no openings at all. Power is **hard-wired**: the power supply's own USB-C cable (iUniker
+  XSG-0503500HUS, 5.25 V 4 A) plugs into the board and snaps into a slot in the back cover's bottom edge, on the
+  right side seen from the front. The slot is a round hole with a slightly narrower neck, so the cable clicks in and
+  stays; the back cover's rim has a matching gap. The shell itself needs no cut. `CABLE_D` in `build_case.py` is an
+  estimate (4.0 mm): **measure the cable and rerun before printing the back cover.**
+- The thumbwheel sits inside the case and isn't used; the accelerometer (tap / double-tap) takes over its jobs.
+- **Stand:** 12° lean-back cradle. The front lip is only 2 mm tall so it never covers the flush panel's LEDs; the
+  back lip carries the lean and has a slot for the power cable.
 - **Back cover:** speaker grille with a gasket ring, 2 mic-hole clusters, and two rows of vents on the side away
   from the board (bottom row lets cool air in, top row lets warm air out). The shell's walls have no slots.
 - 4 screw columns on the back cover line up with the panel's corner holes (126.2 × 66.3 mm center to center).
@@ -229,7 +232,6 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
 **Hardware and threads:** nothing needs tapping or inserts.
 - 4× M3×35 button head (back cover → panel): the panel's corner holes are already threaded metal.
 - 2× M3×8 (accelerometer → posts in the shell's top wall), self-tapping like the others below.
-- 1 panel-mount USB-C extension cable, 6" (SparkFun CAB-15455 or similar; comes with its 2 M3 screws).
 - 4× M3×8 (shell's top/bottom walls → back cover's rim bosses) and 4× M2.5×8 (board → standoffs): these
   **self-tap** into undersized printed holes (2.6 mm for M3, 2.1 mm for M2.5). Drive each one in slowly the first
   time and don't overtighten; PLA holds fine for occasional opening. If you'll open it a lot, use M3 heat-set inserts.

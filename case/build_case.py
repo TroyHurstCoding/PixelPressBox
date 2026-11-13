@@ -19,7 +19,7 @@ Hardware: 4x M3x8 (lid -> shell), 4x M2.5x8 (board -> lid standoffs),
           4x M3 button head through the lid columns into the panel's corner holes (length printed by check())
 
 Layout (seen from the FRONT): board in the right half, speaker side facing the back cover.
-Walls: no openings. Power comes in through a panel-mount USB-C extension screwed to the back cover.
+Walls: no openings. The power supply's cable plugs into the board and snaps into a slot in the back cover's bottom edge.
 Back cover: speaker grille + speaker gasket ring, two mic holes, vents. Left wall: air intake.
 Board <-> panel: the HUB75 ribbon cable (board header is right-angle, cable heads toward the middle).
 
@@ -57,15 +57,14 @@ BOARD_UNDER = 3.0         # board underside SMD parts (the 8.5 mm socket is chec
 
 # ----------------------------------------------------------------- board placement
 STANDOFF = 10.5           # lid inner face -> board's top (speaker-side) surface; clears the 9.5 mm VH-4P
-USB_EDGE_GAP = 35.0       # board's USB edge -> inside of the right wall: room for the extension cable's plug + bend
+USB_EDGE_GAP = 35.0       # board's USB edge -> inside of the right wall: room for the power plug + cable bend
                           # (also puts the thumbwheel well inside the case; the accelerometer replaces it)
 BOARD_Y0 = -28.8          # board's bottom edge (front view); centered between the panel screw columns
-# Panel-mount USB-C extension (e.g. SparkFun CAB-15455): its female end screws to the back cover, its male end
-# plugs into the board. The shell has no openings at all. CHECK PM_BODY against the real connector before
-# printing the back cover; the flange hides a slightly oversized cut.
-PM_X, PM_Y = -63.0, 20.0  # front-view position on the back cover (right side, above the plug's path)
-PM_HOLE_DX, PM_HOLE_R = 18.0, 1.6        # 18 mm apart, M3 clearance (screws come with the cable)
-PM_BODY = (12.5, 7.5, 2.0)               # body cut-out: width x height, corner radius
+# Hard-wired power: the power supply's own USB-C cable (iUniker XSG-0503500HUS, 5.25 V 4 A) plugs straight into
+# the board and leaves through a snap-in slot in the back cover's bottom edge. MEASURE THE CABLE and set CABLE_D.
+CABLE_D = 4.0             # cable diameter (EST, typical for a 4 A USB-C lead)
+CABLE_X = -52.0           # front-view x of the exit: right side, clear of the panel screw column and the board
+CABLE_SNAP = 0.6          # slot entry this much narrower than the cable, so it clicks in and stays
 
 # derived
 CAV_W, CAV_H = PANEL_W + 2 * CLR, PANEL_H + 2 * CLR
@@ -137,6 +136,7 @@ PANEL_SCREW = 35          # M3x35 button head, from the back
 CBORE_R, CBORE_D = 3.1, 4.0   # head recess (6.2 mm, fits a 5.7 mm button head)
 POST_BASE_R, POST_BASE_H = 4.3, 6.0   # thicker column foot so the recess has walls
 POSTS = [(-PX, PY), (PX, PY), (-PX, -PY), (PX, -PY)]
+CABLE_Y = -CAV_H / 2 + 2.3 + CABLE_D / 2   # cable center: just inside the lid's rim, close to the bottom edge
 POST_LEN = OUT_D - PANEL_BACK_Z           # column ends exactly where the panel's back must be
 PANEL_BITE = PANEL_SCREW - (LID_T + POST_LEN - CBORE_D)
 VENT_H, VENT_Y = 12.0, OUT_H / 2 - 23     # top vents end below the upper screw columns
@@ -231,11 +231,14 @@ def lid():
     cuts += [cyl(1.05, STANDOFF + 2, fx(hx), hy, LID_T - 0.6) for hx, hy in HOLES]  # 2.1 mm pilot for M2.5
     cuts += [cyl(POST_HOLE_R, LID_T + POST_LEN + 2, fx(x), y, -1) for x, y in POSTS]   # M3 through the column
     cuts += [cyl(CBORE_R, CBORE_D + 1, fx(x), y, -1) for x, y in POSTS]                # head recess
-    # panel-mount USB-C: body cut-out + 2 screw holes
-    w, h, r = PM_BODY
-    body = CrossSection.square((w - 2 * r, h - 2 * r)).translate((-(w - 2 * r) / 2, -(h - 2 * r) / 2))
-    cuts.append(body.offset(r, JoinType.Round, 2.0, SEG).extrude(LID_T + 2).translate((fx(PM_X), PM_Y, -1)))
-    cuts += [cyl(PM_HOLE_R, LID_T + 2, fx(PM_X + dx), PM_Y, -1) for dx in (-PM_HOLE_DX / 2, PM_HOLE_DX / 2)]
+    # power cable: a round hole just inside the wall line, with a narrower neck open to the bottom edge to snap
+    # the cable through; the rim gets a matching gap so the cable passes into the case
+    cr = CABLE_D / 2 + 0.1
+    cut_x = fx(CABLE_X)
+    cuts.append(cyl(cr, LID_T + 2, cut_x, CABLE_Y, -1))
+    neck = CABLE_D - CABLE_SNAP
+    cuts.append(rect_box(cut_x - neck / 2, -OUT_H / 2 - 1, cut_x + neck / 2, CABLE_Y, -1, LID_T + 1))
+    cuts.append(box(CABLE_D + 1.0, RIM_T * 3, RIM_D + 2, x=cut_x, y=-rim_h / 2 + RIM_T / 2, z=LID_T - 0.5))
     # speaker grille (inside the gasket ring)
     x = -gw / 2 + 3
     while x <= gw / 2 - 3:
@@ -257,11 +260,19 @@ def lid():
 
 
 def stand():
+    """Desk cradle, 12 deg lean-back. Modeled upright, then tilted: the case's top leans toward -y, so the
+    viewer stands at +y. Front lip is only 2 mm tall so it never covers the flush panel's LEDs (the bezel is 2.3);
+    the back lip carries the lean and has the slot for the power cable."""
     wall, floor, height, width = 3.0, 3.0, 14.0, 120.0
     depth_in = OUT_D + LID_T + 0.6
     outer = box(width, depth_in + 2 * wall, height)
     slot = box(width + 2, depth_in, height, z=floor)
-    channel = (outer - slot).rotate((STAND_ANGLE, 0, 0))
+    front_cut = rect_box(-width, depth_in / 2 - 0.1, width, depth_in / 2 + wall + 1, floor + 2.0, height + 1)
+    # back lip slot: seen from the front, case +X is your left; looking from +y, stand +X is your left too
+    cable_z = floor + (CABLE_Y + OUT_H / 2)                    # cable center height above the cradle floor
+    notch = rect_box(CABLE_X - (CABLE_D + 2) / 2, -depth_in / 2 - wall - 1, CABLE_X + (CABLE_D + 2) / 2,
+                     -depth_in / 2 + 0.1, cable_z - CABLE_D / 2 - 0.5, height + 1)
+    channel = (outer - slot - front_cut - notch).rotate((STAND_ANGLE, 0, 0))
     channel = channel.translate((0, 0, -channel.bounding_box()[2]))
     base = box(width, depth_in + 40, 4.0, y=-10)
     return (channel + base).trim_by_plane((0, 0, 1), 0.0)
@@ -323,14 +334,11 @@ def check():
     if BACK_SPACE - socket_tip < 3:
         errors.append("board's underside socket too close to the panel")
     # 6 wall openings sit in solid wall below the lid rim
-    pm_x0, pm_x1 = PM_X - PM_HOLE_DX / 2 - 4, PM_X + PM_HOLE_DX / 2 + 4
-    if pm_x1 > bx0 - 2 and pm_x0 < bx1:
-        errors.append("panel-mount USB-C overlaps the board")
     for x, y in POSTS:
-        if pm_x0 - POST_BASE_R < x < pm_x1 + POST_BASE_R and abs(y - PM_Y) < 6 + POST_BASE_R:
-            errors.append("panel-mount USB-C hits a panel screw column")
-    if abs(PM_Y - PORT_Y) < 12:
-        errors.append("panel-mount USB-C sits in the plug's path")
+        if abs(x - CABLE_X) < POST_BASE_R + CABLE_D / 2 + 1 and abs(y - CABLE_Y) < POST_BASE_R + CABLE_D / 2 + 1:
+            errors.append("power cable exit hits a panel screw column")
+    if abs(CABLE_X - (-SCREW_X if RIGHT < 0 else SCREW_X)) < 8:
+        errors.append("power cable exit hits a back-cover screw boss")
     if not 3.0 <= PANEL_BITE <= 5.5:
         errors.append("panel screw bite %.1f mm (want 3-5.5): change PANEL_SCREW or CBORE_D" % PANEL_BITE)
     for x, y in POSTS:
@@ -349,8 +357,8 @@ def check():
     print("checks ok")
     print("  panel screws: M3x%d button head, %.1f mm into the panel's holes" % (PANEL_SCREW, PANEL_BITE))
     print("  board: X %.1f..%.1f (right half seen from the front), Y %.1f..%.1f, speaker side facing the back" % (bx0, bx1, by0, by1))
-    print("  board's USB-C: y %.1f, %.0f mm from the right wall; panel-mount USB-C on the back cover at (%.0f, %.0f)" %
-          (PORT_Y, USB_EDGE_GAP, PM_X, PM_Y))
+    print("  board's USB-C %.0f mm in from the right wall; power cable leaves the back cover's bottom edge at x %.0f" %
+          (USB_EDGE_GAP, CABLE_X))
     print("  accelerometer: hangs from the top wall at x %.0f, posts at depth %.1f mm (2x M3x8)" % (ACC_X, ACC_HOLES[0][1]))
     print("  room behind panel %.1f mm; underside socket ends %.1f mm in front of the lid -> %.1f mm to the panel" %
           (BACK_SPACE, socket_tip, BACK_SPACE - socket_tip))

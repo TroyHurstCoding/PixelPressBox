@@ -5,8 +5,7 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 ## Order
 1. `fit_test.stl` (about 30 min): the shell's first 10 mm. Press the panel in: it should slide in with a hair of play.
 2. `shell.stl`, front edge down, no supports.
-3. `lid.stl` (back cover), outside face down, no supports. Wait for the USB-C extension cable and check its
-   connector against the cut-out first.
+3. `lid.stl` (back cover), outside face down, no supports. Measure the power cable first and set `CABLE_D`.
 4. `stand.stl`, as exported.
 
 ## Settings
