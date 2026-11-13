@@ -7,11 +7,14 @@ Tuned for an Ender-3 S1 Pro (0.4 mm nozzle). The board's geometry comes from boa
     python3 board_model.py && python3 build_case.py      # -> stl/*.stl + checks
 
 Parts (print orientation):
-  shell.stl     black PLA   front face DOWN, no supports
-  louver.stl    black PLA   flat, set line width 0.45 mm
-  diffuser.stl  smoked/translucent (or skip for the first test)
+  shell.stl     black PLA   front edge DOWN, no supports. Slicer: 5 wall lines (makes the 2 mm wall solid)
   lid.stl       black PLA   flat, standoffs up, no supports
   stand.stl     black PLA   as exported
+  fit_test_ring.stl         the shell's first 6 mm: print it first and push the panel in to check the fit
+
+The panel sits FLUSH with the shell's front edge: no lip, no louver, no diffuser. The shell is an open frame
+2 mm wide around the panel (0.3 mm gap). The lid's 4 columns are the panel's stop: the M3 screws pull the
+panel back against them, so column length (from PANEL_D) decides flushness. Measure the panel's thickness.
 Hardware: 4x M3x8 (lid -> shell), 4x M2.5x8 (board -> lid standoffs),
           4x M3 button head through the lid columns into the panel's corner holes (length printed by check())
 
@@ -40,15 +43,12 @@ WHEEL = SPEC["thumbwheel"]
 # ----------------------------------------------------------------- panel / shell (mm)
 PANEL_W, PANEL_H, PANEL_D = 160.0, 80.0, 14.7   # MEASURE YOUR PANEL'S THICKNESS
 PITCH, COLS, ROWS = 2.5, 64, 32
-CLR = 0.3                 # fit clearance per side
-DIFF_T = 0.8
-BORDER = 2.0
-GRID_T = 4.0
-GRID_LINE = 0.45
-WALL = 3.0
-FRONT = 1.6
+CLR = 0.3                 # gap between the panel's edge and the shell, per side
+WALL = 2.0                # = the visible bezel around the panel (5 lines of a 0.4 mm nozzle)
+FRONT_CHAMFER = 0.5       # small bevel on the outer front edge; hides first-layer squish ("elephant foot")
+FLUSH = 0.0               # how far the panel's face sits behind the front edge (0 = flush; 0.3 protects LEDs)
 LID_T = 2.4
-CORNER_R = 4.0
+CORNER_R = 3.0            # outer corner radius (keeps >= 1.5 mm of wall at the corners)
 RIM_T, RIM_D = 2.0, 6.0
 STAND_ANGLE = 12.0
 SCREW_X = 25.0            # lid screws (top + bottom walls) at +/- this X
@@ -63,16 +63,14 @@ PORT_WIN = (12.5, 8.0)    # USB-C plug-overmold window (along wall x height)
 WHEEL_CLR = 0.6           # thumbwheel slot clearance
 
 # derived
-DIFF_W, DIFF_H = PANEL_W + 2 * BORDER, PANEL_H + 2 * BORDER
-CAV_W, CAV_H = DIFF_W + 2 * CLR, DIFF_H + 2 * CLR
+CAV_W, CAV_H = PANEL_W + 2 * CLR, PANEL_H + 2 * CLR
 OUT_W, OUT_H = CAV_W + 2 * WALL, CAV_H + 2 * WALL
 BOT_H = SPEC["envelope"]["tallest_bottom"]
 # room behind the panel: board stack + clearance over the panel's own connectors
 # room behind the panel: board stack + the panel's own plugged connectors, wherever they end up
 BACK_SPACE = max(STANDOFF + PCB["t"] + BOARD_UNDER + PANEL_PARTS_H, STANDOFF + PCB["t"] + BOT_H + 3.0)
-INNER_D = DIFF_T + GRID_T + PANEL_D + BACK_SPACE
-OUT_D = FRONT + INNER_D
-PANEL_BACK_Z = FRONT + DIFF_T + GRID_T + PANEL_D
+OUT_D = FLUSH + PANEL_D + BACK_SPACE
+PANEL_BACK_Z = FLUSH + PANEL_D
 SCREW_Z = OUT_D - 3.5
 RIGHT = -1                               # -X is the right side when you face the display
 BX1 = CAV_W / 2 - USB_EDGE_GAP           # distance from center to the board's USB edge (board x = 0)
@@ -124,7 +122,7 @@ PANEL_SCREW = 35          # M3x35 button head, from the back
 CBORE_R, CBORE_D = 3.1, 4.0   # head recess (6.2 mm, fits a 5.7 mm button head)
 POST_BASE_R, POST_BASE_H = 4.3, 6.0   # thicker column foot so the recess has walls
 POSTS = [(-PX, PY), (PX, PY), (-PX, -PY), (PX, -PY)]
-POST_LEN = (OUT_D - PANEL_BACK_Z) + 0.2
+POST_LEN = OUT_D - PANEL_BACK_Z           # column ends exactly where the panel's back must be
 PANEL_BITE = PANEL_SCREW - (LID_T + POST_LEN - CBORE_D)
 VENT_H, VENT_Y = 12.0, OUT_H / 2 - 23     # top vents end below the upper screw columns
 
@@ -168,8 +166,10 @@ def stadium_x(length_y, height_z, y, z, depth_x, x):
 
 # ----------------------------------------------------------------- parts
 def shell():
-    body = rounded_slab(OUT_W, OUT_H, OUT_D, CORNER_R)
-    s = body - box(CAV_W, CAV_H, OUT_D, z=FRONT) - box(PANEL_W + 0.4, PANEL_H + 0.4, FRONT + 1, z=-0.5)
+    c = FRONT_CHAMFER
+    body = Manifold.batch_hull([rounded_slab(OUT_W - 2 * c, OUT_H - 2 * c, 0.01, CORNER_R - c),
+                                rounded_slab(OUT_W, OUT_H, OUT_D - c, CORNER_R, z=c)])
+    s = body - box(CAV_W, CAV_H, OUT_D + 2, z=-1)   # open front: the panel fills the whole opening
     cuts = [y_cyl(1.7, OUT_H + 2, sx, SCREW_Z) for sx in (-SCREW_X, SCREW_X)]
     # USB-C window in the right wall
     cuts.append(stadium_x(PORT_WIN[0], PORT_WIN[1], PORT_Y, z_of(PORT_D), WALL * 4, RIGHT * OUT_W / 2))
@@ -182,24 +182,11 @@ def shell():
                           WHEEL_Y, z_of(WHEEL_D), WALL * 4, RIGHT * OUT_W / 2))
     # finger scallop on the outside so the wheel is easy to reach
     # shallow thumb scoop around the slot: a 6 mm-radius cylinder along Y, sunk 1 mm into the outer wall
-    cuts.append(y_cyl(6.0, 24.0, RIGHT * (OUT_W / 2 + 5.0), z_of(WHEEL_D)).translate((0, WHEEL_Y, 0)))
+    cuts.append(y_cyl(6.0, 24.0, RIGHT * (OUT_W / 2 + 5.4), z_of(WHEEL_D)).translate((0, WHEEL_Y, 0)))
     # air intake, low on the left wall
     for k in range(4):
         cuts.append(box(WALL * 4, 3.0, 18, x=-RIGHT * OUT_W / 2, y=-OUT_H / 2 + 10 + k * 6, z=OUT_D - 26))
     return s - union(cuts)
-
-
-def louver():
-    frame = box(DIFF_W, DIFF_H, GRID_T) - box(PANEL_W, PANEL_H, GRID_T + 2, z=-1)
-    bars = [box(GRID_LINE, PANEL_H, GRID_T, x=-PANEL_W / 2 + k * PITCH) for k in range(COLS + 1)]
-    bars += [box(PANEL_W, GRID_LINE, GRID_T, y=-PANEL_H / 2 + k * PITCH) for k in range(ROWS + 1)]
-    riw, rih = PANEL_W + 0.5, PANEL_H + 0.5
-    ring = box(riw + 2.4, rih + 2.4, 4.0, z=GRID_T) - box(riw, rih, 6, z=GRID_T - 1)
-    return union([frame] + bars) + ring
-
-
-def diffuser():
-    return box(DIFF_W, DIFF_H, DIFF_T)
 
 
 def lid():
@@ -213,7 +200,7 @@ def lid():
             parts.append(box(8, 4, RIM_D, x=fx(sx), y=sy * (rim_h / 2 - RIM_T - 2.0), z=LID_T))
     for hx, hy in HOLES:                    # board standoffs (M2.5)
         parts.append(cyl(2.4, STANDOFF, fx(hx), hy, LID_T))
-    for x, y in POSTS:                     # panel screw columns (0.2 mm preload keeps the panel seated)
+    for x, y in POSTS:                     # panel screw columns: the panel's back rests on their ends
         parts.append(cyl(POST_R, POST_LEN, fx(x), y, LID_T))
         parts.append(cyl(POST_BASE_R, POST_BASE_H, fx(x), y, LID_T))
     # speaker gasket ring: channels sound to the grille, stops 1 mm short of the speaker (no buzz)
@@ -347,8 +334,10 @@ def main():
     check()
     out = os.path.join(HERE, "stl")
     os.makedirs(out, exist_ok=True)
-    for name, fn in (("shell", shell), ("louver", louver), ("diffuser", diffuser), ("lid", lid), ("stand", stand)):
+    for name, fn in (("shell", shell), ("lid", lid), ("stand", stand)):
         save(fn(), os.path.join(out, name + ".stl"))
+    # 6 mm slice of the shell's front edge: a 20-minute print to check the panel's fit before the long print
+    save(shell().trim_by_plane((0, 0, -1), -6.0), os.path.join(out, "fit_test_ring.stl"))
     print("\nOuter size: %.1f x %.1f mm front, %.1f mm deep + %.1f mm back cover" % (OUT_W, OUT_H, OUT_D, LID_T))
 
 

@@ -52,8 +52,7 @@ def main(out):
     lid.apply_transform(trimesh.transformations.rotation_matrix(np.pi, (0, 1, 0)))
     lid.apply_translation((0, 0, bc.OUT_D + bc.LID_T))
     board = [(tm(m), c, 1.0) for m, c in bc.placed_board()]
-    louver = tm(bc.louver())
-    louver.apply_translation((0, 0, bc.FRONT + bc.DIFF_T))
+    panel = tm(bc.box(bc.PANEL_W, bc.PANEL_H, bc.PANEL_D, z=bc.FLUSH))  # the LED panel, flush at the front
 
     fig = plt.figure(figsize=(18, 12), dpi=100)
     # 1 open from the back: board sitting in the case
@@ -68,11 +67,11 @@ def main(out):
     ax = fig.add_subplot(2, 2, 3, projection="3d")
     up = trimesh.transformations.rotation_matrix(np.pi / 2, (1, 0, 0))  # make Y point up
     side = []
-    for m, c, a in [(shell, "#3a3d42", 1.0), (lid, "#55595f", 1.0)] + board:
+    for m, c, a in [(shell, "#3a3d42", 1.0), (lid, "#55595f", 1.0), (panel, "#1f6fd1", 1.0)] + board:
         m2 = m.copy()
         m2.apply_transform(up)
         side.append((m2, c, a))
-    draw(ax, side, elev=4, azim=180, title="Right side: USB-C window (lower) + thumbwheel slot (upper)")
+    draw(ax, side, elev=4, azim=180, title="Right side: panel (blue) flush with the front edge (left), USB-C + thumbwheel")
     # 4 back cover inside: standoffs, gasket ring, posts
     ax = fig.add_subplot(2, 2, 4, projection="3d")
     draw(ax, [(lid_raw, "#7a7f86", 1.0)], elev=62, azim=-70,
