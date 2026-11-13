@@ -225,6 +225,7 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
 
 **Hardware and threads:** nothing needs tapping or inserts.
 - 4× M3×35 button head (back cover → panel): the panel's corner holes are already threaded metal.
+- 2× M3×8 (accelerometer → posts in the shell's top wall), self-tapping like the others below.
 - 4× M3×8 (shell's top/bottom walls → back cover's rim bosses) and 4× M2.5×8 (board → standoffs): these
   **self-tap** into undersized printed holes (2.6 mm for M3, 2.1 mm for M2.5). Drive each one in slowly the first
   time and don't overtighten; PLA holds fine for occasional opening. If you'll open it a lot, use M3 heat-set inserts.
@@ -238,8 +239,10 @@ sits. If the panel ends up proud or sunk, measure its thickness, set `PANEL_D`, 
    back cover into the panel, then the 4 M3×8 screws through the shell's top and bottom walls.
 5. Plug USB-C in from the right side.
 
-**Accelerometer (ADXL345):** no mount yet. It can go on the inside of the top wall with thin double-sided foam
-tape (tap detection works through tape). Screw bosses can be added once its hole spacing is measured.
+**Accelerometer (ADXL345):** hangs from 2 posts on the inside of the shell's top wall, left half (seen from the
+front), components and pins facing down, pin row toward the back cover. Sized from `case/GY-291_ADXL345_module.step`:
+20.4 × 16.1 mm board, 3.6 mm holes 15.5 mm apart. Two M3×8 screws self-tap into the posts. The posts have 45° ramps
+on their front side so the shell still prints without supports. Cross-section: `case/accel_mount.png`.
 
 ## What's verified vs. not
 - ✅ Firmware **compiles** for the ESP32-S3-WROOM-1-N16R8 with Seengreat's pin map (Arduino core 3.3, 0 warnings).

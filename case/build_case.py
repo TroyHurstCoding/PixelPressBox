@@ -116,6 +116,16 @@ MICS = [part_rect("mic1"), part_rect("mic2")]
 # 64x32x2.5mm-rgb-matrix: holes at x 16.96/17.08 and 143.23/143.24, y 6.76 and 73.02/73.13 on 160x80).
 # Center-to-center 126.2 x 66.3 mm. Clearance holes (3.4 mm) absorb the ~0.2 mm spread.
 PX, PY = 126.2 / 2, 66.3 / 2
+# ADXL345 accelerometer (GY-291 style board, from GY-291_ADXL345_module.step): 20.4 x 16.1 x 1.6 mm PCB,
+# two 3.6 mm holes 15.5 mm apart, 2.3 mm in from one long edge; 8-pin header along the other long edge
+# (pins stick out 8.5 mm on the component side, 1.4 mm on the other). It hangs from the INSIDE of the shell's
+# top wall, components and pins facing down into the case, pin edge toward the back cover.
+ACC_X = 35.0               # left half seen from the front, clear of the Seengreat board (right half)
+ACC_Z = 30.0               # board center depth (front face at 0); keeps the post ramps behind the panel
+ACC_HOLE_DX, ACC_HOLE_OFF = 15.5, 5.75   # hole spacing; hole row 5.75 mm from the board's center line
+ACC_POST_L, ACC_POST_R = 5.5, 3.0        # posts stand 5.5 mm off the wall (clears the 1.4 mm pin stubs)
+ACC_PILOT_R = 1.3                         # 2.6 mm pilot, 6.6 mm deep: an M3x8 bites 6.4 mm; 0.9 mm skin outside
+ACC_HOLES = [(ACC_X - ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF), (ACC_X + ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF)]
 POST_R = 3.3              # column radius (1.6 mm wall around an M3 clearance hole)
 POST_HOLE_R = 1.7         # M3 clearance
 PANEL_SCREW = 35          # M3x35 button head, from the back
@@ -183,7 +193,19 @@ def shell():
     # finger scallop on the outside so the wheel is easy to reach
     # shallow thumb scoop around the slot: a 6 mm-radius cylinder along Y, sunk 1 mm into the outer wall
     cuts.append(y_cyl(6.0, 24.0, RIGHT * (OUT_W / 2 + 5.4), z_of(WHEEL_D)).translate((0, WHEEL_Y, 0)))
-    return s - union(cuts)
+    # accelerometer posts on the inside of the top wall. The shell prints front-down, so each post gets a 45 deg
+    # ramp on its front side and needs no supports.
+    wall_y = CAV_H / 2
+    posts = []
+    for hx, hz in ACC_HOLES:
+        cylp = y_cyl(ACC_POST_R, ACC_POST_L + 0.5, hx, hz).translate((0, wall_y - (ACC_POST_L + 0.5) / 2, 0))
+        foot = box(2 * ACC_POST_R, 0.5, 2 * ACC_POST_R + ACC_POST_L, x=hx, y=wall_y + 0.25,
+                   z=hz - ACC_POST_R - ACC_POST_L)
+        posts.append(Manifold.batch_hull([cylp, foot]))
+    s = s + union(posts)
+    pilots = [y_cyl(ACC_PILOT_R, ACC_POST_L + 1.6, hx, hz).translate((0, wall_y - ACC_POST_L / 2 + 0.3, 0))
+              for hx, hz in ACC_HOLES]
+    return s - union(cuts + pilots)
 
 
 def lid():
@@ -308,6 +330,14 @@ def check():
     for x, y in POSTS:
         if bx0 - POST_BASE_R < x < bx1 + POST_BASE_R and by0 - POST_BASE_R < y < by1 + POST_BASE_R:
             errors.append("screw column foot at (%.0f,%.0f) reaches under the board" % (x, y))
+    # 7 accelerometer: inside the depth between the panel's back and the back cover's rim, clear of the board
+    ramp_front = ACC_HOLES[0][1] - ACC_POST_R - ACC_POST_L
+    if ramp_front < PANEL_BACK_Z + 0.5:
+        errors.append("accelerometer post ramps reach the panel's edge (move ACC_Z back)")
+    if not (PANEL_BACK_Z + 1 < ACC_Z - 8.05 and ACC_Z + 8.05 < OUT_D - RIM_D - 1):
+        errors.append("accelerometer board doesn't fit between the panel and the back cover's rim")
+    if ACC_X - 10.2 < bx1 + 3 and ACC_X + 10.2 > bx0 - 3:
+        errors.append("accelerometer hangs over the Seengreat board")
     if errors:
         raise SystemExit("CHECK FAILED:\n  " + "\n  ".join(errors))
     print("checks ok")
@@ -315,6 +345,7 @@ def check():
     print("  board: X %.1f..%.1f (right half seen from the front), Y %.1f..%.1f, speaker side facing the back" % (bx0, bx1, by0, by1))
     print("  USB-C window center: y %.1f, %.1f mm in from the back edge" % (PORT_Y, PORT_D))
     print("  thumbwheel slot center: y %.1f, %.1f mm in from the back edge" % (WHEEL_Y, WHEEL_D))
+    print("  accelerometer: hangs from the top wall at x %.0f, posts at depth %.1f mm (2x M3x8)" % (ACC_X, ACC_HOLES[0][1]))
     print("  room behind panel %.1f mm; underside socket ends %.1f mm in front of the lid -> %.1f mm to the panel" %
           (BACK_SPACE, socket_tip, BACK_SPACE - socket_tip))
 
