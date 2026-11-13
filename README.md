@@ -155,13 +155,14 @@ Each can be switched off under `cards`.
 
 ### Clock styles
 `clock.style` picks the main clock: **classic** (time, date, weather, meeting countdown, busy light),
-**big** (full-height segment digits), **nixie** (glowing tubes), **words** ("HALF / PAST / ELEVEN") or
-**tetris**. The other styles can also rotate in as their own cards (`cards.nixie_clock`, `big_clock`,
+**big** (full-height beveled segment digits), **nixie** (photographed nixie tubes that slowly breathe),
+**words** ("HALF / PAST / ELEVEN", stepping down the screen) or **tetris**. Nixie, big and words are ports
+of the Tronbyt community apps Nixel Clock, Big Clock and Fuzzy Clock (Apache-2.0, credits in `NOTICE`). The other styles can also rotate in as their own cards (`cards.nixie_clock`, `big_clock`,
 `word_clock`). Only the classic face shows the date, weather and meeting countdown.
 
 ### Fun screens and pictures
-- **Fireplace**, **bouncing text** (`cards.bounce_text`, changes color on every wall hit),
-  self-playing **Snake** and **Breakout**. Original pixel art, so no licensed game characters.
+- **Fireplace** (Tidbyt's Yule Log animation, built into the firmware), **bouncing text** (`cards.bounce_text`, changes color on every wall hit),
+  self-playing **Snake** and **Breakout**. No licensed game characters or logos.
 - **Digital rain hidden word:** set `cards.rain_word` (e.g. `"TROY"`). The rain falls everywhere except
   the letters, so the word shows up as dark shapes in the rain. Up to 5 letters are big, up to 10 small.
 - **Image shuffle:** put pictures in an `images` folder on the microSD card: animated **GIF**, **PNG** or
@@ -276,7 +277,6 @@ Edit the numbers at the top of `board_model.py`, re-run it, and the case gets de
 ## To-do / later
 - [ ] **Measure the panel thickness** when it arrives → set `PANEL_D` in `case/build_case.py`, re-run.
 - [ ] **Test-fit print** (shell corner slice + louver strip, ~30 min) before the full ~8 h print.
-- [ ] WiFi firmware updates from the phone page (no USB needed once it's on the desk).
 - [ ] Team logos (16×16 pixel art from the SD card).
 - [ ] Voice commands (ESP-SR on the board's two mics): "next", "start focus", "what's next".
 - [ ] Keyhole slots for wall mounting (if it ever goes on a wall).

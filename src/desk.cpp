@@ -466,12 +466,12 @@ std::vector<String> wordClockLines(int h, int m) {
     case 10: return {"TEN", "PAST", H[hourNow]};
     case 15: return {"QUARTER", "PAST", H[hourNow]};
     case 20: return {"TWENTY", "PAST", H[hourNow]};
-    case 25: return {"TWENTY", "FIVE PAST", H[hourNow]};
+    case 25: return {"TWENTY-FIVE", "PAST", H[hourNow]};
     case 30: return {"HALF", "PAST", H[hourNow]};
-    case 35: return {"TWENTY", "FIVE TO", H[hourNext]};
-    case 40: return {"TWENTY", "TO", H[hourNext]};
-    case 45: return {"QUARTER", "TO", H[hourNext]};
-    case 50: return {"TEN", "TO", H[hourNext]};
-    default: return {"FIVE", "TO", H[hourNext]};
+    case 35: return {"TWENTY-FIVE", "TILL", H[hourNext]};
+    case 40: return {"TWENTY", "TILL", H[hourNext]};
+    case 45: return {"QUARTER", "TILL", H[hourNext]};
+    case 50: return {"TEN", "TILL", H[hourNext]};
+    default: return {"FIVE", "TILL", H[hourNext]};
   }
 }

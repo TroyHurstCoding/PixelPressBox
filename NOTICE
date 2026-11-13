@@ -1,0 +1,15 @@
+PixelPressbox
+https://github.com/TroyHurstCoding/PixelPressBox
+
+Some screens are ports of Tidbyt/Tronbyt community apps from https://github.com/tronbyt/apps,
+licensed under the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0).
+Their artwork is converted into src/tronbyt_assets.h by tools/gen_tronbyt_assets.py.
+
+  Nixel Clock  - by saltedlolly (apps/nixelclock): nixie tube digit images and glow timing.
+  Big Clock    - by Joey Hoer (apps/bigclock): 13x32 segment digit and colon images, layout.
+  Fuzzy Clock  - by Max Timkovich (apps/fuzzyclock): wording and staircase layout of the word clock.
+  Yule Log     - by Tidbyt (apps/yulelog): the fireplace animation. Its footage is from Pexels
+                 (https://www.pexels.com/video/6507518/), used under the Pexels license.
+
+Changes: images converted to C arrays (RGB565 / 1-bit masks); layouts redrawn in C++ for the
+ESP32 HUB75 panel; the word clock uses a hand-drawn 4x6 capital font in place of Tidbyt's 5x8.

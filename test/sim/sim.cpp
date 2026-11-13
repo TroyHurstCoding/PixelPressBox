@@ -147,6 +147,7 @@ int main() {
   CFG.twelveHour = true;
   drawWordClock(late); dump("43_word_clock");
   drawWordClock(parseIsoUtc("2026-11-13T05:47:00")); dump("44_word_clock_quarter_to");
+  drawWordClock(parseIsoUtc("2026-11-12T22:37:00")); dump("47_word_clock_twenty_five");
   for (int f = 0; f < 80; f++) drawFireplace(f);
   dump("45_fireplace_v2");
   CFG.bounceText = "DVD";

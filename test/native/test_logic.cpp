@@ -454,12 +454,12 @@ static void test_batch2() {
   auto wc1 = wordClockLines(23, 30);
   assert(wc1.size() == 3 && wc1[0] == "HALF" && wc1[1] == "PAST" && wc1[2] == "ELEVEN");
   auto wc2 = wordClockLines(21, 47);
-  assert(wc2[0] == "QUARTER" && wc2[1] == "TO" && wc2[2] == "TEN");
+  assert(wc2[0] == "QUARTER" && wc2[1] == "TILL" && wc2[2] == "TEN");
   auto wc3 = wordClockLines(11, 58);
   assert(wc3.size() == 2 && wc3[0] == "TWELVE" && wc3[1] == "O'CLOCK");
   auto wc4 = wordClockLines(0, 2);
   assert(wc4[0] == "TWELVE" && wc4[1] == "O'CLOCK");
-  assert(wordClockLines(14, 37)[1] == "FIVE TO" && wordClockLines(14, 37)[2] == "THREE");
+  assert(wordClockLines(14, 37)[0] == "TWENTY-FIVE" && wordClockLines(14, 37)[1] == "TILL" && wordClockLines(14, 37)[2] == "THREE");
   puts("ok  play-by-play text, standings (NFL division, NBA window), Teams presence, text folding/wrap, feeds");
 }
 

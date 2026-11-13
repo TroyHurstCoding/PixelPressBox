@@ -4,6 +4,7 @@
 #include "board.h"  // Seengreat RGB Matrix HUB75 S3 pin map
 #include "holidays.h"
 #include "desk.h"
+#include "tronbyt_assets.h"  // nixel tubes + big clock digits (tronbyt/apps, Apache-2.0)
 #include <cmath>
 #include <cstring>
 #ifndef PIXELPRESSBOX_SIM
@@ -1077,7 +1078,9 @@ void displayBlit565(const uint16_t *px) {
   end();
 }
 
-// ---------------------------------------------------------------- nixie tube clock
+// ---------------------------------------------------------------- nixel clock (after "Nixel Clock" by saltedlolly)
+// Photographed nixie tubes, 15x15 each, 4 tubes + a 4px separator = 64 px. Each tube breathes on its own slow
+// wave (dims up to 20/255 like the original). Artwork: tronbyt/apps, Apache-2.0 (src/tronbyt_assets.h, NOTICE).
 static int clockDigits(time_t now, int d[4]) {
   struct tm t;
   localtime_r(&now, &t);
@@ -1086,80 +1089,111 @@ static int clockDigits(time_t now, int d[4]) {
   return t.tm_sec;
 }
 
-void drawNixieClock(time_t now, int frame) {
-  int d[4];
-  int sec = clockDigits(now, d);
-  const int CX[4] = {7, 21, 43, 57}, CY = 16, R = 7;
-  begin();
-  for (int i = 0; i < 4; i++) {
-    bool blank = i == 0 && d[0] == 0 && CFG.twelveHour;
-    // the glowing tube: warm, slightly flickering, darker toward the rim
-    for (int y = -R - 1; y <= R + 1; y++)
-      for (int x = -R; x <= R; x++) {
-        float dist = sqrtf((float)(x * x) + (float)(y * y) * 0.8f);
-        if (dist > R + 0.5f) continue;
-        float g = 0.25f + (1.0f - dist / (R + 1)) * 0.75f + ((rnd() % 100) / 100.0f) * 0.15f;
-        if (dist > R - 0.8f) g *= 0.45f;  // darker glass rim
-        if (blank) g *= 0.25f;
-        dma->drawPixel(CX[i] + x, CY + y, c565(scaleColor(0xE8380A, g > 1 ? 1 : g)));
-      }
-    if (blank) continue;
-    // the lit numeral (font glyph), bright amber with a hot core
-    unsigned char ch = '0' + d[i];
-    for (int col = 0; col < 5; col++) {
-      unsigned char bits = font[ch * 5 + col];
-      for (int row = 0; row < 7; row++, bits >>= 1)
-        if (bits & 1) dma->drawPixel(CX[i] - 2 + col, CY - 4 + row, c565(row % 3 == 1 ? 0xFFF0A0 : 0xFFC030));
+static uint16_t dim565(uint16_t c, int amount) {  // black overlay with alpha `amount` (0..255)
+  if (!amount) return c;
+  int k = 255 - amount;
+  int r = ((c >> 11) & 0x1F) * k / 255, g = ((c >> 5) & 0x3F) * k / 255, b = (c & 0x1F) * k / 255;
+  return (uint16_t)((r << 11) | (g << 5) | b);
+}
+static void blit565(const uint16_t *px, int x0, int y0, int w, int h, int amount) {
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++) {
+      uint16_t c = px[y * w + x];
+      if (c) dma->drawPixel(x0 + x, y0 + y, dim565(c, amount));
     }
+}
+
+void drawNixieClock(time_t now, int frame) {
+  static const float WAVES[5][2][2] = {{{1, 0.00f}, {2, 0.40f}}, {{1, 0.55f}, {2, 0.10f}}, {{1, 0.30f}, {2, 0.75f}},
+                                       {{1, 0.85f}, {2, 0.20f}}, {{1, 0.65f}, {2, 0.50f}}};
+  int d[4];
+  clockDigits(now, d);
+#ifdef PIXELPRESSBOX_SIM
+  int f = frame % 16;
+#else
+  int f = (millis() / 250) % 16;
+#endif  // the original's 16-frame, 250 ms glow loop
+  int dims[5];
+  for (int i = 0; i < 5; i++) {
+    float lv = 0;
+    for (int k = 0; k < 2; k++) lv += sinf(2 * (float)M_PI * (WAVES[i][k][0] * f / 16.0f + WAVES[i][k][1]));
+    lv = (lv / 2 + 1) / 2;
+    dims[i] = (int)(lv * 20 / 4 + 0.5f) * 4;
   }
-  uint32_t colon = sec % 2 ? 0xFF8020 : 0xFFC860;
-  rect(31, 12, 2, 2, colon);
-  rect(31, 19, 2, 2, colon);
-  (void)frame;
+  begin();
+  const int X[5] = {0, 15, 30, 34, 49}, Y = 8;  // row is centred: (32 - 15) / 2
+  for (int i = 0; i < 4; i++) {
+    if (i == 0 && d[0] == 0 && CFG.twelveHour) continue;  // no leading zero in 12-hour time
+    int xi = i < 2 ? X[i] : X[i + 1];
+    blit565(NIXEL_DIGITS + d[i] * 225, xi, Y, 15, 15, dims[i]);
+  }
+  blit565(NIXEL_SEP, X[2], Y, 4, 15, dims[4]);
   end();
 }
 
-// ---------------------------------------------------------------- big clock (full-height segments)
-// segments: a top, b top-right, c bottom-right, d bottom, e bottom-left, f top-left, g middle
-static const uint8_t SEG[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
-static void bigDigit(int x, int dgt, uint32_t c) {
-  const int w = 13, t = 2, top = 0, mid = 15, bot = 30;
-  uint8_t s = SEG[dgt];
-  if (s & 0x01) rect(x + 2, top, w - 4, t, c);
-  if (s & 0x40) rect(x + 2, mid, w - 4, t, c);
-  if (s & 0x08) rect(x + 2, bot, w - 4, t, c);
-  if (s & 0x20) rect(x, top + 2, t, mid - 3, c);
-  if (s & 0x02) rect(x + w - t, top + 2, t, mid - 3, c);
-  if (s & 0x10) rect(x, mid + 3, t, bot - mid - 4, c);
-  if (s & 0x04) rect(x + w - t, mid + 3, t, bot - mid - 4, c);
+// ---------------------------------------------------------------- big clock (after "Big Clock" by Joey Hoer)
+// Full-height 13x32 beveled segment digits spread edge to edge, blinking colon. Masks from tronbyt/apps.
+static void bigMask(int x0, int dgt, uint32_t col) {
+  uint16_t c = c565(col);
+  for (int y = 0; y < 32; y++) {
+    uint16_t bits = BIG_DIGITS[dgt * 32 + y];
+    for (int x = 0; x < 13; x++)
+      if (bits & (1 << (12 - x))) dma->drawPixel(x0 + x, y, c);
+  }
 }
 
 void drawBigClock(time_t now) {
   int d[4];
   int sec = clockDigits(now, d);
   begin();
+  // Row(space_between): 13 + 13 + 4 + 13 + 13 = 56, the 8 spare pixels split into four 2 px gaps
   const int X[4] = {0, 15, 36, 51};
   for (int i = 0; i < 4; i++)
-    if (!(i == 0 && d[0] == 0 && CFG.twelveHour)) bigDigit(X[i], d[i], WHITE);
-  if (sec % 2 == 0) {
-    rect(31, 10, 2, 2, WHITE);
-    rect(31, 20, 2, 2, WHITE);
-  }
+    if (!(i == 0 && d[0] == 0 && CFG.twelveHour)) bigMask(X[i], d[i], WHITE);
+  if (sec % 2 == 0)
+    for (int y = 0; y < 14; y++) {
+      uint8_t bits = BIG_SEP[y];
+      for (int x = 0; x < 4; x++)
+        if (bits & (8 >> x)) dma->drawPixel(30 + x, 9 + y, c565(WHITE));
+    }
   end();
 }
 
-// ---------------------------------------------------------------- word clock
+// ---------------------------------------------------------------- word clock (after "Fuzzy Clock" by Max Timkovich)
+// Tidbyt's 5x8 font look: 4x6 capitals on a 5 px pitch, three lines stepping right one character each.
+static const char *const F5[] = {  // A-Z, then '-' and '\''; 6 rows of 4 pixels, '#' = lit
+    ".##.#..##..######..##..#", "###.#..####.#..##..####.", ".##.#..##...#...#..#.##.", "###.#..##..##..##..####.",
+    "#####...###.#...#...####", "#####...###.#...#...#...", ".##.#..##...#.###..#.###", "#..##..######..##..##..#",
+    "###..#...#...#...#..###.", "..##...#...#...##..#.##.", "#..##.#.##..##..#.#.#..#", "#...#...#...#...#...####",
+    "#..##########..##..##..#", "#..###.###.##.###.###..#", ".##.#..##..##..##..#.##.", "###.#..##..####.#...#...",
+    ".##.#..##..##..###.#.##.", "###.#..##..####.#.#.#..#", ".##.#..#.#....#.#..#.##.", "###..#...#...#...#...#..",
+    "#..##..##..##..##..#.##.", "#..##..##..##..#.##..##.", "#..##..##..##########..#", "#..##..#.##..##.#..##..#",
+    "#.#.#.#.#.#..#...#...#..", "####...#..#..#..#...####", "........###.............", ".#...#..................",
+};
+static void fuzzyChar(char ch, int x, int y, uint32_t col) {
+  const char *g = nullptr;
+  if (ch >= 'A' && ch <= 'Z') g = F5[ch - 'A'];
+  else if (ch == '-') g = F5[26];
+  else if (ch == '\'') g = F5[27];
+  if (!g) return;
+  uint16_t c = c565(col);
+  for (int i = 0; i < 24 && g[i]; i++)
+    if (g[i] == '#') dma->drawPixel(x + i % 4, y + i / 4, c);
+  if (ch == 'Q') dma->drawPixel(x + 3, y + 6, c);  // Q's tail
+}
+
 void drawWordClock(time_t now) {
   struct tm t;
   localtime_r(&now, &t);
   std::vector<String> lines = wordClockLines(t.tm_hour, t.tm_min);
   int n = lines.size();
-  int pitch = n >= 4 ? 8 : 10, y0 = (32 - (n - 1) * pitch - 7) / 2;
+  // padding 4 top/bottom, lines 8 tall, spaced evenly in the 24 px between (as the original's Column)
+  float gap = (24.0f - n * 8) / (n + 1);
   begin();
   for (int i = 0; i < n; i++) {
-    int x = 3 + i * 4;  // staircase
-    if (x + textWidth(lines[i]) > 63) x = 63 - textWidth(lines[i]);
-    text(lines[i], x, y0 + i * pitch, WHITE);
+    int y = 4 + (int)(gap * (i + 1) + i * 8 + 0.5f) + 1;
+    int x = 3 + i * 5;
+    for (unsigned k = 0; k < lines[i].length(); k++) fuzzyChar(lines[i][k], x + k * 5, y, WHITE);
   }
   end();
 }

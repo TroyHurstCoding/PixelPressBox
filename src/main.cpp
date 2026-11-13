@@ -679,6 +679,7 @@ static int showCard(const Card *c) {
     return maxOff ? pump(2500) : 0;
   }
   if (c->kind == CARD_IMAGES) return playNextImage(c->dwell * 1000, pump);
+  if (c->kind == CARD_FIRE) return playYuleLog(c->dwell * 1000, pump);
   if (c->kind == CARD_NIXIE || c->kind == CARD_BIGCLOCK || c->kind == CARD_WORDCLOCK) {
     uint32_t t0 = millis();
     for (int f = 0; millis() - t0 < (uint32_t)c->dwell * 1000; f++) {

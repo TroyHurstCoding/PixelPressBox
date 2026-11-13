@@ -6,6 +6,7 @@
 #include <new>
 #include <vector>
 #include "render.h"
+#include "tronbyt_assets.h"  // YULE_GIF: Tidbyt's Yule Log (tronbyt/apps, Apache-2.0; video by Pexels)
 
 static const int W = 64, H = 32;
 static std::vector<String> files;
@@ -168,5 +169,29 @@ int playNextImage(uint32_t dwellMs, int (*wait)(uint32_t)) {
     free(jpg);
   }
   free(data);
+  return r;
+}
+
+// ---- fireplace: Tidbyt's Yule Log loop (64x32, 150 frames at 100 ms), played from flash
+int playYuleLog(uint32_t dwellMs, int (*wait)(uint32_t)) {
+  if (!canvas) canvas = (uint16_t *)ps_malloc(W * H * 2);
+  if (!canvas) return wait(1000);
+  AnimatedGIF *gif = new (ps_malloc(sizeof(AnimatedGIF))) AnimatedGIF();
+  gif->begin(GIF_PALETTE_RGB565_LE);
+  int r = 0;
+  if (gif->open((uint8_t *)YULE_GIF, sizeof(YULE_GIF), gifDraw)) {
+    offX = offY = 0;
+    memset(canvas, 0, W * H * 2);
+    uint32_t t0 = millis();
+    while (!r && millis() - t0 < dwellMs) {
+      int delayMs = 0;
+      if (!gif->playFrame(false, &delayMs)) gif->reset();
+      displayBlit565(canvas);
+      r = wait(delayMs > 10 ? delayMs : 100);
+    }
+    gif->close();
+  }
+  gif->~AnimatedGIF();
+  free(gif);
   return r;
 }

@@ -9,3 +9,5 @@ int imageCount();
 // Show the next image (shuffled) for about dwellMs; animated GIFs keep looping until then.
 // wait(ms) is the main loop's pump(): a non-zero result (button press etc.) stops early and is returned.
 int playNextImage(uint32_t dwellMs, int (*wait)(uint32_t));
+// The fireplace card: Tidbyt's Yule Log animation (built into the firmware) for about dwellMs.
+int playYuleLog(uint32_t dwellMs, int (*wait)(uint32_t));
