@@ -60,6 +60,12 @@ function add(){let e=document.getElementById('nt');if(!e.value)return;fetch('/to
 function status(){fetch('/status').then(r=>r.json()).then(s=>{document.getElementById('st').textContent=s.line;document.getElementById('ms').textContent=s.ms;if(s.fw)document.getElementById('fw').textContent='Firmware '+s.fw});
 fetch('/cards').then(r=>r.json()).then(c=>{let p=document.getElementById('pin');if(document.activeElement===p)return;
 p.innerHTML="<option value=''>Rotate through all cards</option>"+c.cards.map(x=>"<option value='"+esc(x.k)+"'"+(x.k==c.pinned?" selected":"")+">Show only: "+esc(x.l)+"</option>").join('')})}
+function checkUpd(){let b=document.getElementById('cu'),f=document.getElementById('fw');b.disabled=true;b.textContent='Checking...';
+f.textContent='Asking GitHub for a newer version...';let n=0;
+fetch('/checkupdate').catch(()=>{});let t=setInterval(()=>{n++;fetch('/status').then(r=>r.json()).then(s=>{
+let m=s.fw;if(s.ota)m+=' ('+Math.round(s.ota/1024)+' KB)';f.textContent='Firmware '+m;
+if(/Up to date|failed|off/.test(s.fw)){clearInterval(t);b.disabled=false;b.textContent='Check for update'}
+}).catch(()=>{if(n>3)f.textContent='Restarting with the new firmware... reload in a moment'});if(n>150){clearInterval(t);b.disabled=false;b.textContent='Check for update'}},2000)}
 load();status();setInterval(status,5000);
 </script>
 <h2>Settings</h2>
@@ -83,7 +89,7 @@ static void handleRoot() {
     }
   }
   html += "</div><div class='row'><button class='alt' onclick=\"fetch('/restart')\">Restart</button>"
-          "<button class='alt' onclick=\"fetch('/checkupdate')\">Check for update</button>"
+          "<button class='alt' id=cu onclick='checkUpd()'>Check for update</button>"
           "<button class='alt' onclick=\"location.href='/update'\">Upload firmware</button></div>"
           "<p style='color:#777' id=fw>Firmware " FW_VERSION "</p></body></html>";
   server.send(200, "text/html", html);
@@ -146,12 +152,14 @@ void webBegin() {
     d["line"] = webStatusLine;
     d["ms"] = msStatus();
     d["fw"] = String(FW_VERSION) + " | " + lastUpdateStatus();
+    if (otaBusy) d["ota"] = (uint32_t)otaBytes;
     String out;
     serializeJson(d, out);
     server.send(200, "application/json", out);
   });
   server.on("/checkupdate", HTTP_GET, [] {
-    webCheckUpdate = true;  // done by the main loop (it may restart the board)
+    updateCheckQueued();
+    webCheckUpdate = true;  // picked up by the network task within a second (it may restart the board)
     server.send(200, "text/plain", "checking");
   });
   server.on("/cards", HTTP_GET, [] { server.send(200, "application/json", webCardsJson); });

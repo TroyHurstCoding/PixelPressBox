@@ -12,6 +12,7 @@ void autoUpdateTick(time_t now);
 String lastUpdateStatus();
 
 // progress of an automatic update (the display loop draws it; the download runs in the network task)
+void updateCheckQueued();  // phone page asked; the status line says so until the check starts
 extern volatile bool otaBusy;
 extern volatile uint32_t otaBytes;
 void otaSetMainTask();       // call from the display task in setup()

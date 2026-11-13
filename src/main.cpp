@@ -54,7 +54,7 @@ struct Lock {
   Lock() { xSemaphoreTakeRecursive(dataMtx, portMAX_DELAY); }
   ~Lock() { xSemaphoreGiveRecursive(dataMtx); }
 };
-static volatile bool msLoginRequested = false, msLoginOk = false, checkUpdateRequested = false;
+static volatile bool msLoginRequested = false, msLoginOk = false;
 // desk clock state
 static const uint32_t YELLOW_C = 0xFFC000;
 static Weather wx;
@@ -845,12 +845,12 @@ static void netTask(void *) {
           nextCalendar = 0;
         }
       }
+      if (webCheckUpdate) {  // phone page button: check right away, before the (slower) data refresh
+        webCheckUpdate = false;
+        checkForUpdate();  // may restart the board
+      }
       refreshData();
       autoUpdateTick(time(nullptr));  // may restart the board
-      if (checkUpdateRequested) {
-        checkUpdateRequested = false;
-        checkForUpdate();
-      }
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
@@ -926,10 +926,6 @@ void loop() {
     pendingCelebrations.erase(pendingCelebrations.begin());
   }
   checkChime();
-  if (webCheckUpdate) {
-    webCheckUpdate = false;
-    checkUpdateRequested = true;  // netTask checks GitHub; result shows on the phone page
-  }
 
   if (focusOn) {  // the focus timer owns the screen until it ends or you press the wheel
     runFocus();

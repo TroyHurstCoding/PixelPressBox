@@ -15,6 +15,7 @@ bool otaOnMainTask() { return xTaskGetCurrentTaskHandle() == mainTask; }
 static int lastCheckDay = -1;
 
 String lastUpdateStatus() { return status; }
+void updateCheckQueued() { status = "Check queued..."; }
 
 static bool install(const String &url, size_t size, const String &md5) {
   NetworkClientSecure client;
@@ -54,6 +55,7 @@ static bool install(const String &url, size_t size, const String &md5) {
 }
 
 String checkForUpdate() {
+  status = "Checking GitHub...";
   if (!CFG.autoUpdateManifest.length()) return status = "Auto-update off (no manifest URL)";
   JsonDocument m;
   int code = httpGetJson(CFG.autoUpdateManifest + "?t=" + String((uint32_t)time(nullptr)), m);  // skip caches
@@ -63,7 +65,7 @@ String checkForUpdate() {
   if (!ver.length() || !bin.length()) return status = "Update check failed: bad manifest";
   if (ver == FW_VERSION) return status = "Up to date (" + ver + ")";
   Serial.printf("[update] %s -> %s\n", FW_VERSION, ver.c_str());
-  status = "Updating to " + ver;
+  status = "Downloading " + ver;
   if (install(bin, size, md5)) {
     status = "Installed " + ver + ", restarting";
     delay(1500);
