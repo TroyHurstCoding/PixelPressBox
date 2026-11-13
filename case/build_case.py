@@ -7,7 +7,7 @@ Tuned for an Ender-3 S1 Pro (0.4 mm nozzle). The board's geometry comes from boa
     python3 board_model.py && python3 build_case.py      # -> stl/*.stl + checks
 
 Parts (print orientation):
-  shell.stl     black PLA   front edge DOWN, no supports. Slicer: 5 wall lines (makes the 2 mm wall solid)
+  shell.stl     black PLA   BACK edge down, no supports. Slicer: 5 wall lines (makes the 2 mm wall solid)
   lid.stl       black PLA   flat, standoffs up, no supports
   stand.stl     black PLA   as exported
   fit_test.stl              the shell's first 10 mm: push the panel in to check the fit
@@ -140,8 +140,17 @@ CBORE_R, CBORE_D = 3.1, 4.0   # head recess (6.2 mm, fits a 5.7 mm button head)
 POST_BASE_R, POST_BASE_H = 4.3, 6.0   # thicker column foot so the recess has walls
 POSTS = [(-PX, PY), (PX, PY), (-PX, -PY), (PX, -PY)]
 CABLE_Y = -CAV_H / 2 + 2.3 + CABLE_D / 2   # cable center: just inside the lid's rim, close to the bottom edge
-POST_LEN = OUT_D - PANEL_BACK_Z           # column ends exactly where the panel's back must be
-PANEL_BITE = PANEL_SCREW - (LID_T + POST_LEN - CBORE_D)
+# Panel stop tabs: one per panel screw, reaching in from the shell's top/bottom wall right behind the panel. The
+# panel's back rests on them and the M3x35 screws pull it tight against them, so the panel is held by the SHELL:
+# take the 4 screws out from the back and the panel comes out the front, back cover still on. The tab's back is
+# a 45 deg slope down to the wall (the shell prints back-edge down, so the slope faces the bed: no supports).
+TAB_W, TAB_T = 10.0, 3.0                  # width along the wall; thickness at the tip
+TAB_REACH = (CAV_H / 2 - PY) + 4.5        # wall -> 4.5 mm past the screw
+def tab_back_z(d):                        # z of the tab's back face at distance d from the wall
+    return PANEL_BACK_Z + TAB_T + max(TAB_REACH - d, 0.0)
+# lid columns now only guide the screws: they stop 0.5 mm short of the tab's sloped back
+POST_LEN = OUT_D - tab_back_z((CAV_H / 2 - PY) - POST_R) - 0.5
+PANEL_BITE = PANEL_SCREW - (OUT_D + LID_T - CBORE_D - PANEL_BACK_Z)
 VENT_H, VENT_Y = 12.0, OUT_H / 2 - 23     # top vents end below the upper screw columns
 
 
@@ -189,8 +198,8 @@ def shell():
                                 rounded_slab(OUT_W, OUT_H, OUT_D - c, CORNER_R, z=c)])
     s = body - box(CAV_W, CAV_H, OUT_D + 2, z=-1)   # open front: the panel fills the whole opening
     cuts = []
-    # corner bosses for the back-cover screws, flush with the back edge. Their underside is a 45 deg slope toward
-    # the walls so the shell still prints front-down without supports.
+    # corner bosses for the back-cover screws, flush with the back edge (they sit on the bed; the slope toward the
+    # walls just saves plastic)
     bosses = []
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -205,14 +214,29 @@ def shell():
             bosses.append(Manifold.batch_hull([blk, strip_a, strip_b]))
             cuts.append(cyl(1.3, BOSS_D + 1, sx * BOSS_X, sy * BOSS_Y, OUT_D - BOSS_D + 1))   # 2.6 mm M3 pilot
     s = s + union(bosses)
-    # accelerometer posts on the inside of the top wall. The shell prints front-down, so each post gets a 45 deg
-    # ramp on its front side and needs no supports.
+    # panel stop tabs (see TAB_* above): flat front face, sloped back, M3 clearance hole
+    tabs, tab_holes = [], []
+    for x, y in POSTS:
+        sy = 1 if y > 0 else -1
+        wy = sy * CAV_H / 2
+        tip_y = wy - sy * TAB_REACH
+        prism = Manifold.batch_hull([
+            rect_box(x - TAB_W / 2, min(wy, tip_y), x + TAB_W / 2, max(wy, tip_y), PANEL_BACK_Z, PANEL_BACK_Z + TAB_T),
+            rect_box(x - TAB_W / 2, min(wy, wy - sy * 0.5), x + TAB_W / 2, max(wy, wy - sy * 0.5),
+                     PANEL_BACK_Z, tab_back_z(0.0))])
+        tabs.append(prism + rect_box(x - TAB_W / 2, min(wy, wy + sy * 0.5), x + TAB_W / 2, max(wy, wy + sy * 0.5),
+                                     PANEL_BACK_Z, tab_back_z(0.0)))   # fused into the wall
+        tab_holes.append(cyl(POST_HOLE_R, 40, x, y, PANEL_BACK_Z - 1))
+    s = s + union(tabs)
+    cuts += tab_holes
+    # accelerometer posts on the inside of the top wall. The shell prints back-edge down, so each post gets a
+    # 45 deg ramp on its back side and needs no supports.
     wall_y = CAV_H / 2
     posts = []
     for hx, hz in ACC_HOLES:
         cylp = y_cyl(ACC_POST_R, ACC_POST_L + 0.5, hx, hz).translate((0, wall_y - (ACC_POST_L + 0.5) / 2, 0))
         foot = box(2 * ACC_POST_R, 0.5, 2 * ACC_POST_R + ACC_POST_L, x=hx, y=wall_y + 0.25,
-                   z=hz - ACC_POST_R - ACC_POST_L)
+                   z=hz - ACC_POST_R)
         posts.append(Manifold.batch_hull([cylp, foot]))
     s = s + union(posts)
     pilots = [y_cyl(ACC_PILOT_R, ACC_POST_L + 1.6, hx, hz).translate((0, wall_y - ACC_POST_L / 2 + 0.3, 0))
@@ -372,9 +396,15 @@ def check():
         if bx0 - POST_BASE_R < x < bx1 + POST_BASE_R and by0 - POST_BASE_R < y < by1 + POST_BASE_R:
             errors.append("screw column foot at (%.0f,%.0f) reaches under the board" % (x, y))
     # 7 accelerometer: inside the depth between the panel's back and the back cover's rim, clear of the board
-    ramp_front = ACC_HOLES[0][1] - ACC_POST_R - ACC_POST_L
-    if ramp_front < PANEL_BACK_Z + 0.5:
-        errors.append("accelerometer post ramps reach the panel's edge (move ACC_Z back)")
+    if ACC_HOLES[0][1] - ACC_POST_R < PANEL_BACK_Z + 0.5:
+        errors.append("accelerometer posts reach the panel (move ACC_Z back)")
+    if ACC_HOLES[0][1] + ACC_POST_R + ACC_POST_L > OUT_D - RIM_D - 0.5:
+        errors.append("accelerometer post ramps reach the back cover's rim")
+    for x, y in POSTS:                     # tabs vs accelerometer board footprint (top wall)
+        if y > 0 and abs(x - ACC_X) < 10.2 + TAB_W / 2 + 1:
+            errors.append("panel stop tab hits the accelerometer")
+    if POST_LEN < 8:
+        errors.append("lid columns too short to guide the screws")
     if not (PANEL_BACK_Z + 1 < ACC_Z - 8.05 and ACC_Z + 8.05 < OUT_D - RIM_D - 1):
         errors.append("accelerometer board doesn't fit between the panel and the back cover's rim")
     if ACC_X - 10.2 < bx1 + 3 and ACC_X + 10.2 > bx0 - 3:
@@ -382,7 +412,8 @@ def check():
     if errors:
         raise SystemExit("CHECK FAILED:\n  " + "\n  ".join(errors))
     print("checks ok")
-    print("  panel screws: M3x%d button head, %.1f mm into the panel's holes" % (PANEL_SCREW, PANEL_BITE))
+    print("  panel screws: M3x%d button head, %.1f mm into the panel's holes; panel rests on 4 shell tabs" % (PANEL_SCREW, PANEL_BITE))
+    print("  lid columns %.1f mm (screw guides), tabs %.1f mm thick at the screw" % (POST_LEN, tab_back_z(CAV_H / 2 - PY) - PANEL_BACK_Z))
     print("  board: X %.1f..%.1f (right half seen from the front), Y %.1f..%.1f, speaker side facing the back" % (bx0, bx1, by0, by1))
     print("  board's USB-C %.0f mm in from the right wall; power cable leaves the back cover's bottom edge at x %.0f" %
           (USB_EDGE_GAP, CABLE_X))

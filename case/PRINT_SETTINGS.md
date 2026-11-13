@@ -3,8 +3,9 @@
 Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 
 ## Order
-1. `fit_test.stl` (about 30 min): the shell's first 10 mm. Press the panel in: it should slide in with a hair of play.
-2. `shell.stl`, front edge down, no supports.
+1. `fit_test.stl` (about 30 min, front edge down): the shell's front 10 mm. Press the panel in: it should slide in with a hair of play.
+2. `shell.stl`, **back edge down**, no supports. The panel tabs, corner bosses and accelerometer posts all slope
+   toward the bed.
 3. `lid.stl` (back cover), outside face down, no supports. Measure the power cable first and set `CABLE_D`.
 4. `stand.stl`, as exported.
 
@@ -28,7 +29,8 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
   Damp PLA prints fuzzy, stringy walls.
 
 ## Expect
-- The front bezel and the back cover's outside face print against the bed, so they come out the smoothest.
+- The back cover's outside face prints against the bed. The shell's front bezel is its top edge: keep 5 walls so the
+  top layers close cleanly.
 - The shell's sides show faint layer lines. The slower outer wall and thinner layers above shrink them.
 - The accelerometer posts inside the top wall have 45° ramps on their front side, so they need no supports.
 - The shell's walls have no openings, so there's nothing to clean up on the sides.
