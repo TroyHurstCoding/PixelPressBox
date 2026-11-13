@@ -36,7 +36,12 @@ void drawStandings(const Card &c, bool showTitle);               // title flash,
 void drawTextCard(const String &title, uint32_t titleColor, const String &right, uint32_t rightColor,
                   const std::vector<String> &lines, int offset);  // wrapped text scrolling up under a title
 bool drawTetrisClock(time_t now, bool restart);                  // true while blocks are falling
-void drawDigitalRain(int frame);                               // red, green, blue, 0.6 s each                          // pixels at size 1
+void drawDigitalRain(int frame);                         // CFG.rainWord shows as negative space
+void drawFireplace(int frame);
+void displayBlit565(const uint16_t *px);                  // show a 64x32 RGB565 picture
+void drawBouncer(int frame);
+void drawSnake(int frame);
+void drawBreakout(int frame);                               // red, green, blue, 0.6 s each                          // pixels at size 1
 
 uint32_t teamColor(const Team &t);
 uint32_t teamAlt(const Team &t);

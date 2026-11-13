@@ -17,7 +17,9 @@
   "holidays": { "show": "all", "countdown_days": 21, "skip": ["Pi Day", "Groundhog Day"] },
   "cards": { "sun_moon": true, "date_progress": true, "weather_details": true,
              "standings": true, "on_this_day": true, "on_this_day_gentle": true,
-             "word_of_the_day": true, "dad_jokes": true, "tetris_clock": true, "digital_rain": true },
+             "word_of_the_day": true, "dad_jokes": true, "tetris_clock": true, "digital_rain": true, "rain_word": "",
+             "fireplace": true, "bouncing_logo": true, "bounce_text": "PIXEL", "snake": true, "breakout": true,
+             "images": true },
   "ufc": { "show": true, "days_ahead": 10 },
 
   "leagues": ["nfl", "nba", "mlb"],

@@ -5,6 +5,10 @@
 #include "holidays.h"
 #include "desk.h"
 #include <cmath>
+#include <cstring>
+#ifndef PIXELPRESSBOX_SIM
+#include <glcdfont.c>  // the panel font's glyphs, to cut the hidden word out of the rain
+#endif
 
 static MatrixPanel_I2S_DMA *dma = nullptr;
 #ifdef PIXELPRESSBOX_SIM
@@ -833,27 +837,232 @@ static uint8_t rainSpeed[64], rainLen[64];
 static uint32_t rainSeed = 12345;
 static uint32_t rnd() { return rainSeed = rainSeed * 1103515245u + 12345u; }
 
+// mask of the hidden word: true where a letter is (rain skips those pixels, so the word shows as dark shapes)
+static bool rainMask[32][64];
+static String rainMaskWord = "\x01";
+static void buildRainMask(const String &w) {
+  memset(rainMask, 0, sizeof(rainMask));
+  rainMaskWord = w;
+  String s = foldAscii(w);
+  if (!s.length()) return;
+  int sc = s.length() <= 5 ? 2 : 1;            // big letters for short words
+  if (s.length() > 10) s = s.substring(0, 10);
+  int wpx = s.length() * 6 * sc - sc, x0 = (64 - wpx) / 2, y0 = (32 - 7 * sc) / 2;
+  for (unsigned i = 0; i < s.length(); i++) {
+    unsigned char ch = s[i];
+    for (int col = 0; col < 5; col++) {
+      unsigned char bits = font[ch * 5 + col];
+      for (int row = 0; row < 8; row++, bits >>= 1)
+        if (bits & 1)
+          for (int dy = 0; dy < sc; dy++)
+            for (int dx = 0; dx < sc; dx++) {
+              int x = x0 + (i * 6 + col) * sc + dx, y = y0 + row * sc + dy;
+              if (x >= 0 && x < 64 && y >= 0 && y < 32) rainMask[y][x] = true;
+            }
+    }
+  }
+}
+
 void drawDigitalRain(int frame) {
+  if (CFG.rainWord != rainMaskWord) buildRainMask(CFG.rainWord);
+  bool word = CFG.rainWord.length() > 0;
+  // with a hidden word the rain is denser (longer trails, shorter gaps) so the letters read clearly
+  const int lenMin = word ? 14 : 6, lenRange = word ? 14 : 12, gap = word ? 6 : 16;
   if (frame == 0)
     for (int x = 0; x < 64; x++) {
       rainY[x] = -(int8_t)(rnd() % 32);
       rainSpeed[x] = 1 + rnd() % 3;
-      rainLen[x] = 6 + rnd() % 12;
+      rainLen[x] = lenMin + rnd() % lenRange;
     }
   begin();
+  if (word)  // faint green glow everywhere except the letters, so the word reads as solid black
+    for (int y = 0; y < 32; y++)
+      for (int x = 0; x < 64; x++)
+        if (!rainMask[y][x]) dma->drawPixel(x, y, c565(0x002A0C));
   for (int x = 0; x < 64; x++) {
     if (frame % rainSpeed[x] == 0) rainY[x]++;
     if (rainY[x] - rainLen[x] > 32) {
-      rainY[x] = -(int8_t)(rnd() % 16);
+      rainY[x] = -(int8_t)(rnd() % gap);
       rainSpeed[x] = 1 + rnd() % 3;
-      rainLen[x] = 6 + rnd() % 12;
+      rainLen[x] = lenMin + rnd() % lenRange;
     }
     for (int k = 0; k < rainLen[x]; k++) {
       int y = rainY[x] - k;
       if (y < 0 || y > 31) continue;
+      if (word && rainMask[y][x]) continue;  // negative space: the word is where the rain isn't
       if (k == 0) dma->drawPixel(x, y, c565(0xD0FFD0));  // bright head
       else dma->drawPixel(x, y, c565(scaleColor(0x00FF40, 1.0f - (float)k / rainLen[x])));
     }
   }
+  end();
+}
+
+// ---------------------------------------------------------------- fireplace
+static uint8_t heat[34][64];
+void drawFireplace(int frame) {
+  if (frame == 0) memset(heat, 0, sizeof(heat));
+  for (int x = 0; x < 64; x++) heat[33][x] = (x > 4 && x < 59) ? 200 + rnd() % 56 : 0;  // embers along the log
+  for (int y = 0; y < 33; y++)  // heat rises, cools and drifts sideways
+    for (int x = 0; x < 64; x++) {
+      int src = (x + (int)(rnd() % 3) - 1 + 64) % 64;
+      int v = (heat[y + 1][src] + heat[y + 1][x] + heat[y + 1][(x + 1) % 64] + (y + 2 < 34 ? heat[y + 2][x] : 0)) / 4;
+      v -= 3 + rnd() % 14;  // cooling: flames thin out and flicker as they rise
+      heat[y][x] = v < 0 ? 0 : v;
+    }
+  begin();
+  for (int y = 0; y < 27; y++)
+    for (int x = 0; x < 64; x++) {
+      int v = heat[y + 5][x];
+      if (v < 18) continue;
+      uint8_t r = v > 85 ? 255 : v * 3, g = v > 140 ? (v - 140) * 2 + 60 : (v > 85 ? (v - 85) : 0),
+              b = v > 220 ? (v - 220) * 4 : 0;
+      dma->drawPixel(x, y, dma->color565(r, g, b));
+    }
+  // logs
+  rect(6, 27, 52, 3, 0x5A3418);
+  rect(10, 29, 46, 3, 0x4A2A12);
+  rect(6, 27, 2, 3, 0x7A4A24);
+  rect(54, 29, 2, 3, 0x7A4A24);
+  end();
+}
+
+// ---------------------------------------------------------------- bouncing logo
+static float bx = 3, by = 4, bvx = 0.7f, bvy = 0.45f;
+static int bcol = 0;
+void drawBouncer(int frame) {
+  static const uint32_t COLS[] = {0xFF3030, 0x30A0FF, 0x40FF60, 0xFFD000, 0xFF40FF, 0x40FFFF, 0xFF8020};
+  String t = foldAscii(CFG.bounceText).substring(0, 9);
+  int w = t.length() * 6 + 3, h = 11;
+  bx += bvx;
+  by += bvy;
+  bool hitX = false, hitY = false;
+  if (bx <= 0 || bx + w >= 64) { bvx = -bvx; bx = bx <= 0 ? 0 : 64 - w; hitX = true; }
+  if (by <= 0 || by + h >= 32) { bvy = -bvy; by = by <= 0 ? 0 : 32 - h; hitY = true; }
+  if (hitX || hitY) bcol = (bcol + 1) % 7;
+  static int cornerFlash = 0;
+  if (hitX && hitY) cornerFlash = 20;  // the famous corner hit
+  begin();
+  uint32_t c = cornerFlash > 0 && (cornerFlash-- / 3) % 2 ? WHITE : COLS[bcol];
+  int x = (int)bx, y = (int)by;
+  rect(x + 1, y, w - 2, h, c);  // rounded box with the text cut out
+  rect(x, y + 1, w, h - 2, c);
+  text(t, x + 2, y + 2, 0x000000);
+  (void)frame;
+  end();
+}
+
+// ---------------------------------------------------------------- snake (plays itself)
+static const int SW = 32, SH = 16;  // 2x2-pixel cells
+static int8_t snX[SW * SH], snY[SW * SH];
+static int snLen = 0, snDir = 0, foodX = 0, foodY = 0;
+static bool snBody(int x, int y, int skipTail) {
+  for (int i = 0; i < snLen - skipTail; i++)
+    if (snX[i] == x && snY[i] == y) return true;
+  return false;
+}
+static void snFood() {
+  do {
+    foodX = rnd() % SW;
+    foodY = rnd() % SH;
+  } while (snBody(foodX, foodY, 0));
+}
+static void snReset() {
+  snLen = 4;
+  for (int i = 0; i < snLen; i++) { snX[i] = 10 - i; snY[i] = 8; }
+  snDir = 0;
+  snFood();
+}
+void drawSnake(int frame) {
+  if (frame == 0 && snLen == 0) snReset();
+  static const int DX[4] = {1, 0, -1, 0}, DY[4] = {0, 1, 0, -1};
+  // greedy AI: of the moves that don't crash, take the one closest to the food (ties keep going straight)
+  int best = -1, bestD = 1 << 30;
+  for (int k = 0; k < 4; k++) {
+    int d = (snDir + k) % 4;
+    if (k == 2) continue;  // no reversing
+    int nx = snX[0] + DX[d], ny = snY[0] + DY[d];
+    if (nx < 0 || nx >= SW || ny < 0 || ny >= SH || snBody(nx, ny, 1)) continue;
+    // look one step further so it doesn't walk into a dead end
+    int exits = 0;
+    for (int e = 0; e < 4; e++) {
+      int ex = nx + DX[e], ey = ny + DY[e];
+      if (ex >= 0 && ex < SW && ey >= 0 && ey < SH && !snBody(ex, ey, 1) && !(ex == snX[0] && ey == snY[0])) exits++;
+    }
+    int dist = abs(nx - foodX) + abs(ny - foodY) + (exits == 0 ? 1000 : 0) + (k == 0 ? 0 : 1);
+    if (dist < bestD) { bestD = dist; best = d; }
+  }
+  if (best < 0) {
+    snReset();
+  } else {
+    snDir = best;
+    int nx = snX[0] + DX[best], ny = snY[0] + DY[best];
+    bool eat = nx == foodX && ny == foodY;
+    if (eat && snLen < SW * SH - 1) snLen++;
+    for (int i = snLen - 1; i > 0; i--) { snX[i] = snX[i - 1]; snY[i] = snY[i - 1]; }
+    snX[0] = nx;
+    snY[0] = ny;
+    if (eat) snFood();
+    if (snLen > 120) snReset();  // fill-up limit: start over
+  }
+  begin();
+  rect(foodX * 2, foodY * 2, 2, 2, 0xFF3030);
+  for (int i = snLen - 1; i >= 0; i--)
+    rect(snX[i] * 2, snY[i] * 2, 2, 2, i == 0 ? 0xC0FF80 : scaleColor(0x30E040, 1.0f - 0.5f * i / snLen));
+  end();
+}
+
+// ---------------------------------------------------------------- breakout (plays itself)
+static bool bricks[5][16];
+static float ballX, ballY, ballVX, ballVY, padX;
+static int bricksLeft = 0;
+static void boReset() {
+  for (int r = 0; r < 5; r++)
+    for (int c = 0; c < 16; c++) bricks[r][c] = true;
+  bricksLeft = 80;
+  ballX = 32; ballY = 22; ballVX = 0.55f; ballVY = -0.6f; padX = 26;
+}
+void drawBreakout(int frame) {
+  if (frame == 0 && bricksLeft == 0) boReset();
+  static const uint32_t ROWC[5] = {0xFF3030, 0xFF8C00, 0xFFD000, 0x30E040, 0x3080FF};
+  for (int step = 0; step < 2; step++) {
+    ballX += ballVX;
+    ballY += ballVY;
+    if (ballX < 0) { ballX = 0; ballVX = -ballVX; }
+    if (ballX > 63) { ballX = 63; ballVX = -ballVX; }
+    if (ballY < 0) { ballY = 0; ballVY = -ballVY; }
+    int r = ((int)ballY - 2) / 3, c = (int)ballX / 4;  // bricks: rows of 3 px from y=2, columns of 4 px
+    if (ballY >= 2 && r >= 0 && r < 5 && c >= 0 && c < 16 && bricks[r][c]) {
+      bricks[r][c] = false;
+      bricksLeft--;
+      ballVY = -ballVY;
+    }
+    if (ballY >= 29 && ballY < 30.5f && ballVY > 0 && ballX >= padX - 1 && ballX <= padX + 11) {
+      ballVY = -ballVY;
+      ballVX = (ballX - (padX + 5)) * 0.12f;  // where it hits the paddle sets the angle
+      if (fabsf(ballVX) < 0.25f) ballVX = ballVX < 0 ? -0.25f : 0.25f;
+    }
+    if (ballY > 32) boReset();
+  }
+  // paddle AI follows the ball (a little lazily)
+  float target = ballX - 5;
+  padX += (target - padX) * 0.25f;
+  if (padX < 0) padX = 0;
+  if (padX > 54) padX = 54;
+  if (bricksLeft == 0) boReset();
+  begin();
+  for (int r = 0; r < 5; r++)
+    for (int c = 0; c < 16; c++)
+      if (bricks[r][c]) rect(c * 4, 2 + r * 3, 3, 2, ROWC[r]);
+  rect((int)padX, 30, 10, 2, 0xC0C0C0);
+  rect((int)ballX, (int)ballY, 1, 1, WHITE);
+  (void)frame;
+  end();
+}
+
+void displayBlit565(const uint16_t *px) {
+  begin();
+  for (int y = 0; y < H; y++)
+    for (int x = 0; x < W; x++)
+      if (px[y * W + x]) dma->drawPixel(x, y, px[y * W + x]);
   end();
 }

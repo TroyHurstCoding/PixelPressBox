@@ -135,6 +135,14 @@ bool loadSettings(const char *path) {
   c.cardJoke = cards["dad_jokes"] | c.cardJoke;
   c.cardTetris = cards["tetris_clock"] | c.cardTetris;
   c.cardRain = cards["digital_rain"] | c.cardRain;
+  c.rainWord = cards["rain_word"] | "";
+  c.rainWord.toUpperCase();
+  c.cardFire = cards["fireplace"] | c.cardFire;
+  c.cardBounce = cards["bouncing_logo"] | c.cardBounce;
+  c.bounceText = cards["bounce_text"] | c.bounceText.c_str();
+  c.cardSnake = cards["snake"] | c.cardSnake;
+  c.cardBreakout = cards["breakout"] | c.cardBreakout;
+  c.cardImages = cards["images"] | c.cardImages;
   c.historyGentle = cards["on_this_day_gentle"] | c.historyGentle;
   c.teamsPresence = d["outlook"]["teams_presence"] | c.teamsPresence;
   c.updatePassword = d["update_password"] | c.updatePassword.c_str();

@@ -1,3 +1,3 @@
 // version.h - written by tools/release.sh for each published build
 #pragma once
-#define FW_VERSION "2026.11.12-2033"
+#define FW_VERSION "2026.11.12-2050"

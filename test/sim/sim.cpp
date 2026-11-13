@@ -126,5 +126,17 @@ int main() {
   g.lastPlay = "J.Daniels pass deep left intended for C.Okonkwo INTERCEPTED by J.Holland at NYG 0";
   drawFootball(g, now, false, 10); dump("34_football_last_play");
   drawClockFace(now, w, "IN CALL", 0xFF2020, true); dump("35_clock_teams_in_call");
+  // ---- fun screens
+  CFG.rainWord = "TROY";
+  for (int f = 0; f < 90; f++) drawDigitalRain(f);
+  dump("36_rain_hidden_word");
+  for (int f = 0; f < 60; f++) drawFireplace(f);
+  dump("37_fireplace");
+  for (int f = 0; f < 40; f++) drawBouncer(f);
+  dump("38_bouncing_logo");
+  for (int f = 0; f < 150; f++) drawSnake(f);
+  dump("39_snake");
+  for (int f = 0; f < 400; f++) drawBreakout(f);
+  dump("40_breakout");
   puts("rendered");
 }

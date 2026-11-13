@@ -104,8 +104,10 @@ void webBegin() {
   // The new image goes into the spare app slot, is checked, then the board restarts into it.
   updater.setup(&server, "/update", "admin", CFG.updatePassword);
   Update.onProgress([](size_t done, size_t) {
+    otaBytes = done;
+    if (!otaOnMainTask()) return;  // automatic update: the display loop draws the progress
     static size_t last = 0;
-    if (done - last < 64 * 1024 && done > last) return;  // redraw every 64 KB
+    if (done - last < 64 * 1024 && done > last) return;  // phone-page upload: redraw every 64 KB
     last = done;
     drawMessage("UPDATING", String((unsigned)(done / 1024)) + " KB", 0x40A0FF);
   });

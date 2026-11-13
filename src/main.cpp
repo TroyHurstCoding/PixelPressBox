@@ -17,6 +17,7 @@
 #include <map>
 #include "desk.h"
 #include "feeds.h"
+#include "images.h"
 #include "autoupdate.h"
 #include "holidays.h"
 #include "msgraph.h"
@@ -44,6 +45,16 @@ static uint32_t nextFantasy = 0, nextYahoo = 0;
 static bool favOnly = false;
 static bool soundReady = false;
 static std::vector<ScoreEvent> pendingCelebrations;
+
+// ---- threading: downloads run in netTask (core 0); the display/controls loop runs here (core 1).
+// The main loop holds dataMtx all the time and lets go for a moment on every pump() tick; netTask downloads
+// WITHOUT the lock and only takes it to hand over results, so the screen never waits on the network.
+static SemaphoreHandle_t dataMtx = nullptr;
+struct Lock {
+  Lock() { xSemaphoreTakeRecursive(dataMtx, portMAX_DELAY); }
+  ~Lock() { xSemaphoreGiveRecursive(dataMtx); }
+};
+static volatile bool msLoginRequested = false, msLoginOk = false, checkUpdateRequested = false;
 // desk clock state
 static const uint32_t YELLOW_C = 0xFFC000;
 static Weather wx;
@@ -133,6 +144,17 @@ static void stopFocus();
 static int pump(uint32_t ms) {
   uint32_t t0 = millis();
   while (millis() - t0 < ms) {
+    xSemaphoreGiveRecursive(dataMtx);  // let netTask hand over fresh data
+    vTaskDelay(1);
+    xSemaphoreTakeRecursive(dataMtx, portMAX_DELAY);
+    if (otaBusy) {  // an automatic update is downloading in the background
+      static uint32_t lastDraw = 0;
+      if (millis() - lastDraw > 500) {
+        lastDraw = millis();
+        drawMessage("UPDATING", String((unsigned)(otaBytes / 1024)) + " KB", 0x40A0FF);
+      }
+      continue;
+    }
     soundLoop();
     webLoop();
     if (webWantsRestart) {
@@ -168,7 +190,7 @@ static int pump(uint32_t ms) {
     }
     if (webMsLogin) {
       webMsLogin = false;
-      msStartLogin();
+      msLoginRequested = true;  // netTask asks Microsoft for a code
       return 4;
     }
     if (webDeskChanged) {
@@ -214,6 +236,7 @@ static bool refreshData() {
     if ((int32_t)(millis() - nextFetch[lg]) < 0) continue;
     std::vector<Game> fresh;
     if (fetchScoreboard(lg, fresh)) {
+      Lock lock;
       // favorite team just went final with a win -> victory celebration
       for (auto &ng : fresh) {
         if (ng.state != 'f' || !isFavoriteGame(ng)) continue;
@@ -266,22 +289,34 @@ static bool refreshData() {
           cards.push_back(c);
         }
       }
-    fantasyCards = cards;
+    {
+      Lock lock;
+      fantasyCards = cards;
+    }
     nextFantasy = millis() + CFG.pollFantasy * 1000UL;
     changed = true;
   }
 
   if (weatherConfigured() && (int32_t)(millis() - nextWeather) >= 0) {
     Weather w;
-    if (fetchWeather(w)) wx = w;
+    if (fetchWeather(w)) {
+      Lock lock;
+      wx = w;
+    }
     nextWeather = millis() + (wx.ok ? CFG.pollWeather : 120) * 1000UL;
   }
 
   if (msSignedIn() && (int32_t)(millis() - nextCalendar) >= 0) {
     std::vector<Meeting> m;
-    if (msFetchCalendar(now, m)) meetings = m;
     std::vector<String> f;
-    if (msFetchFlagged(f)) flagged = f;
+    bool okM, okF;
+    {
+      Lock lock;  // msgraph keeps its token in shared state; calendar calls are quick
+      okM = msFetchCalendar(now, m);
+      okF = msFetchFlagged(f);
+      if (okM) meetings = m;
+      if (okF) flagged = f;
+    }
     nextCalendar = millis() + CFG.pollCalendar * 1000UL;
     changed = true;
   }
@@ -291,7 +326,10 @@ static bool refreshData() {
     if (!CFG.cardStandings || !inSeason(lg, now) || (int32_t)(millis() - nextStandings[lg]) < 0) continue;
     std::vector<StandGroup> g;
     bool ok = fetchStandings(lg, g);
-    if (ok) standings[lg] = g;
+    if (ok) {
+      Lock lock;
+      standings[lg] = g;
+    }
     nextStandings[lg] = millis() + (ok ? 6 * 3600 : 900) * 1000UL;
     changed = true;
   }
@@ -299,6 +337,7 @@ static bool refreshData() {
   // Teams presence for the busy light, every minute
   if (CFG.teamsPresence && msSignedIn() && (int32_t)(millis() - nextPresence) >= 0) {
     String a, act;
+    Lock lock;
     if (msFetchPresence(a, act)) {
       presAvail = a;
       presActivity = act;
@@ -309,47 +348,66 @@ static bool refreshData() {
   // daily feeds: on this day, word of the day (refetch when the date changes)
   struct tm lt;
   localtime_r(&now, &lt);
-  if (lt.tm_mday != feedsDay && now > 1700000000) {
+  static uint32_t nextFeedsTry = 0;
+  if (lt.tm_mday != feedsDay && now > 1700000000 && (int32_t)(millis() - nextFeedsTry) >= 0) {
     bool ok = true;
     if (CFG.cardHistory) {
       std::vector<HistoryEvent> h;
-      if (fetchHistory(lt.tm_mon + 1, lt.tm_mday, CFG.historyGentle, h)) history = h;
-      else ok = false;
+      if (fetchHistory(lt.tm_mon + 1, lt.tm_mday, CFG.historyGentle, h)) {
+        Lock lock;
+        history = h;
+      } else ok = false;
     }
     if (CFG.cardWord) {
       WordOfDay w;
-      if (fetchWord(w)) wotd = w;
-      else ok = false;
+      if (fetchWord(w)) {
+        Lock lock;
+        wotd = w;
+      } else ok = false;
     }
-    if (ok) feedsDay = lt.tm_mday;  // otherwise retry next time round
+    if (ok) feedsDay = lt.tm_mday;
+    else nextFeedsTry = millis() + 10 * 60000UL;  // a feed is down: try again in 10 minutes, not every card
     changed = true;
   }
   if (CFG.cardJoke && (int32_t)(millis() - nextJoke) >= 0) {
     String j;
     bool ok = fetchJoke(j);
-    if (ok) joke = j;
+    if (ok) {
+      Lock lock;
+      joke = j;
+    }
     nextJoke = millis() + (ok ? 1800 : 300) * 1000UL;
   }
 
   if (CFG.ufc && (int32_t)(millis() - nextUfc) >= 0) {
     std::vector<FightEvent> u;
     bool ok = fetchUfc(u);
-    if (ok) ufcEvents = u;
+    if (ok) {
+      Lock lock;
+      ufcEvents = u;
+    }
     nextUfc = millis() + (ok ? 3 * 3600 : 600) * 1000UL;
     changed = true;
   }
 
   if (spotifyConfigured() && (int32_t)(millis() - nextSpotify) >= 0) {
-    bool was = np.playing;
-    spotifyNowPlaying(np);
-    nextSpotify = millis() + (np.playing ? 10 : 30) * 1000UL;
-    changed |= was != np.playing;
+    NowPlaying n = np;
+    bool was = n.playing;
+    spotifyNowPlaying(n);
+    {
+      Lock lock;
+      np = n;
+    }
+    nextSpotify = millis() + (n.playing ? 10 : 30) * 1000UL;
+    changed |= was != n.playing;
   }
 
   if (yahooConfigured() && (int32_t)(millis() - nextYahoo) >= 0) {
     Card c;
-    haveYahoo = yahooMatchup(now, c);
-    if (haveYahoo) yahooCard = c;
+    bool ok = yahooMatchup(now, c);
+    Lock lock;
+    haveYahoo = ok;
+    if (ok) yahooCard = c;
     nextYahoo = millis() + CFG.pollYahoo * 1000UL;
     changed = true;
   }
@@ -396,6 +454,11 @@ static void rebuild() {
   if (CFG.cardJoke && joke.length()) ambient(CARD_JOKE, "joke", 9, PRI_AMBIENT + 1);
   if (CFG.cardTetris) ambient(CARD_TETRIS, "tetris", 12, PRI_AMBIENT);
   if (CFG.cardRain) ambient(CARD_RAIN, "rain", 8, PRI_AMBIENT);
+  if (CFG.cardFire) ambient(CARD_FIRE, "fire", 10, PRI_AMBIENT);
+  if (CFG.cardBounce) ambient(CARD_BOUNCE, "bounce", 10, PRI_AMBIENT);
+  if (CFG.cardSnake) ambient(CARD_SNAKE, "snake", 12, PRI_AMBIENT);
+  if (CFG.cardBreakout) ambient(CARD_BREAKOUT, "breakout", 12, PRI_AMBIENT);
+  if (CFG.cardImages && imageCount() > 0) ambient(CARD_IMAGES, "images", 8, PRI_AMBIENT + 1);
   std::vector<Card> cards = buildCards(all, now, extra);
   if (favOnly || CFG.sports == "favorites") {  // drop non-favorite games, keep everything else
     std::vector<Card> f;
@@ -480,13 +543,13 @@ static int scrollFor(const String &txt, int dwellMs, int x0, Draw draw) {
 static int showCard(const Card *c) {
   if (msLoginPending()) {  // Outlook sign-in: show the code until it's entered
     drawMessage(msUserCode(), "see phone", 0xFFC000);
-    int r = pump(5000);
-    if (msPollLogin() == 1) {
-      drawMessage("OUTLOOK", "signed in", 0x20FF40);
-      nextCalendar = 0;
-      pump(1500);
-    }
+    int r = pump(2000);
     return r == 1 ? 4 : r;
+  }
+  if (msLoginOk) {
+    msLoginOk = false;
+    drawMessage("OUTLOOK", "signed in", 0x20FF40);
+    pump(1500);
   }
   if (!c || c->kind == CARD_CLOCK) {
     uint32_t t0 = millis();
@@ -602,6 +665,7 @@ static int showCard(const Card *c) {
     }
     return maxOff ? pump(2500) : 0;
   }
+  if (c->kind == CARD_IMAGES) return playNextImage(c->dwell * 1000, pump);
   if (c->kind == CARD_TETRIS) {
     uint32_t t0 = millis();
     bool first = true;
@@ -613,11 +677,19 @@ static int showCard(const Card *c) {
     }
     return 0;
   }
-  if (c->kind == CARD_RAIN) {
+  if (c->kind == CARD_RAIN || c->kind == CARD_FIRE || c->kind == CARD_BOUNCE || c->kind == CARD_SNAKE ||
+      c->kind == CARD_BREAKOUT) {
+    const int frameMs = c->kind == CARD_SNAKE ? 70 : c->kind == CARD_FIRE ? 40 : 30;
     uint32_t t0 = millis();
     for (int f = 0; millis() - t0 < (uint32_t)c->dwell * 1000; f++) {
-      drawDigitalRain(f);
-      int r = pump(45);
+      switch (c->kind) {
+        case CARD_RAIN: drawDigitalRain(f); break;
+        case CARD_FIRE: drawFireplace(f); break;
+        case CARD_BOUNCE: drawBouncer(f); break;
+        case CARD_SNAKE: drawSnake(f); break;
+        default: drawBreakout(f); break;
+      }
+      int r = pump(frameMs);
       if (r) return r;
     }
     return 0;
@@ -732,7 +804,36 @@ static void updateStatus() {
 }
 
 // ------------------------------------------------------------------ setup / loop
+// ------------------------------------------------------------------ background downloads (core 0)
+static void netTask(void *) {
+  for (;;) {
+    if (WiFi.status() == WL_CONNECTED && time(nullptr) > 1700000000) {
+      if (msLoginRequested) {
+        msLoginRequested = false;
+        Lock lock;
+        msStartLogin();
+      }
+      if (msLoginPending()) {
+        Lock lock;
+        if (msPollLogin() == 1) {
+          msLoginOk = true;
+          nextCalendar = 0;
+        }
+      }
+      refreshData();
+      autoUpdateTick(time(nullptr));  // may restart the board
+      if (checkUpdateRequested) {
+        checkUpdateRequested = false;
+        checkForUpdate();
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+}
+
 void setup() {
+  dataMtx = xSemaphoreCreateRecursiveMutex();
+  xSemaphoreTakeRecursive(dataMtx, portMAX_DELAY);  // the display loop owns the data except during pump()
   Serial.begin(115200);
   pinMode(BTN_BOOT, INPUT_PULLUP);
   bool expOk = expanderBegin();  // also switches the audio chips' power on
@@ -754,7 +855,10 @@ void setup() {
     delay(1500);
   }
   soundReady = sdOk && soundBegin();
-  if (sdOk) todoLoad();
+  if (sdOk) {
+    todoLoad();
+    imagesScan();
+  }
   {
     Preferences p;
     p.begin("screen", true);
@@ -775,6 +879,8 @@ void setup() {
   Serial.printf("Ready: http://pixelpressbox.local  (%s)  firmware %s\n", WiFi.localIP().toString().c_str(), FW_VERSION);
   drawMessage("LOADING", "");
   if (soundReady) soundPlay("startup");
+  otaSetMainTask();
+  xTaskCreatePinnedToCore(netTask, "net", 16384, nullptr, 1, nullptr, 0);
 }
 
 void loop() {
@@ -788,7 +894,6 @@ void loop() {
     pump(3000);
     return;
   }
-  refreshData();
   rebuild();  // cheap; keeps "IN 12M" style titles fresh. The rotator keeps its place.
   updateStatus();
   while (!pendingCelebrations.empty()) {
@@ -796,14 +901,9 @@ void loop() {
     pendingCelebrations.erase(pendingCelebrations.begin());
   }
   checkChime();
-  autoUpdateTick(nowUtc());
   if (webCheckUpdate) {
     webCheckUpdate = false;
-    drawMessage("CHECKING", "for update", 0x40A0FF);
-    String st = checkForUpdate();  // restarts the board if it installs something
-    drawMessage(st.startsWith("Up to date") ? "UP TO DATE" : "UPDATE", st.startsWith("Up to date") ? "" : "see phone",
-                0x40A0FF);
-    pump(2000);
+    checkUpdateRequested = true;  // netTask checks GitHub; result shows on the phone page
   }
 
   if (focusOn) {  // the focus timer owns the screen until it ends or you press the wheel

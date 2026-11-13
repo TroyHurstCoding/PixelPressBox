@@ -129,6 +129,9 @@ struct Settings {
   bool ufc = true;                         // next UFC event card
   bool cardStandings = true, cardHistory = true, cardWord = true, cardJoke = true;
   bool cardTetris = true, cardRain = true;
+  String rainWord;                         // word hidden in the digital rain ("" = none)
+  bool cardFire = true, cardBounce = true, cardSnake = true, cardBreakout = true, cardImages = true;
+  String bounceText = "PIXEL";             // the bouncing logo's text
   bool historyGentle = true;               // skip "on this day" items about deaths and disasters
   bool teamsPresence = true;               // Teams status drives the busy light (needs Outlook sign-in)
   int ufcDays = 10;                        // show it when the event is this many days away (or live)

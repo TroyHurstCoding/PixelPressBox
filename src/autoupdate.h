@@ -10,3 +10,9 @@ String checkForUpdate();
 // Call from the main loop; checks once a day at CFG.autoUpdateHour (local time).
 void autoUpdateTick(time_t now);
 String lastUpdateStatus();
+
+// progress of an automatic update (the display loop draws it; the download runs in the network task)
+extern volatile bool otaBusy;
+extern volatile uint32_t otaBytes;
+void otaSetMainTask();       // call from the display task in setup()
+bool otaOnMainTask();        // true if the caller is the display task (safe to draw)

@@ -4,10 +4,14 @@
 #include <Update.h>
 #include "model.h"
 #include "net.h"
-#include "render.h"
 #include "version.h"
 
 static String status = "Not checked yet";
+volatile bool otaBusy = false;
+volatile uint32_t otaBytes = 0;
+static TaskHandle_t mainTask = nullptr;
+void otaSetMainTask() { mainTask = xTaskGetCurrentTaskHandle(); }
+bool otaOnMainTask() { return xTaskGetCurrentTaskHandle() == mainTask; }
 static int lastCheckDay = -1;
 
 String lastUpdateStatus() { return status; }
@@ -37,12 +41,13 @@ static bool install(const String &url, size_t size, const String &md5) {
     return false;
   }
   if (md5.length() == 32) Update.setMD5(md5.c_str());  // Update.end() rejects the image if it doesn't match
-  drawMessage("UPDATING", "", 0x40A0FF);
+  otaBytes = 0;
+  otaBusy = true;
   size_t written = Update.writeStream(*http.getStreamPtr());
   http.end();
   if (!Update.end(true) || (size && written != size)) {
     status = "Update failed: " + String(Update.errorString()) + " (" + String((unsigned)written) + " bytes)";
-    drawMessage("UPDATE", "failed", 0xFF2020);
+    otaBusy = false;
     return false;
   }
   return true;
@@ -60,7 +65,7 @@ String checkForUpdate() {
   Serial.printf("[update] %s -> %s\n", FW_VERSION, ver.c_str());
   status = "Updating to " + ver;
   if (install(bin, size, md5)) {
-    drawMessage("UPDATED", ver.substring(0, 10), 0x20FF40);
+    status = "Installed " + ver + ", restarting";
     delay(1500);
     ESP.restart();
   }

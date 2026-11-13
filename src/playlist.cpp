@@ -117,6 +117,11 @@ String cardLabel(const Card &c) {
     case CARD_JOKE: return "Dad joke";
     case CARD_TETRIS: return "Tetris clock";
     case CARD_RAIN: return "Digital rain";
+    case CARD_FIRE: return "Fireplace";
+    case CARD_BOUNCE: return "Bouncing logo";
+    case CARD_SNAKE: return "Snake";
+    case CARD_BREAKOUT: return "Breakout";
+    case CARD_IMAGES: return "Image shuffle";
   }
   return c.key;
 }

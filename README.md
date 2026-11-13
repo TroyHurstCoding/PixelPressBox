@@ -16,7 +16,7 @@ firmware/pixelpressbox-update.bin        later updates over WiFi from the phone 
 sdcard/                                   copy onto a microSD card (config.json + sounds/)
 src/                                      firmware source (PlatformIO / Arduino)
 case/stl/                                 printable case (now with a speaker grille)
-tools/                                    yahoo_auth.py, spotify_auth.py, make_sounds.py
+tools/                                    yahoo_auth.py, spotify_auth.py, make_images.py, make_sounds.py, release.sh
 test/native/                              desktop tests for the logic
 test/sim/                                 desktop screen simulator -> screens_preview.png
 ```
@@ -152,6 +152,17 @@ Turn the ambient cards on or off under `cards`.
   `cards.on_this_day_gentle` skips items about deaths and disasters.
 - **Tetris clock:** the time builds itself out of falling blocks. **Digital rain:** Matrix-style falling code.
 Each can be switched off under `cards`.
+
+### Fun screens and pictures
+- **Fireplace**, **bouncing logo** (your text, `cards.bounce_text`, changes color on every wall hit),
+  self-playing **Snake** and **Breakout**. Original pixel art, so no licensed game characters.
+- **Digital rain hidden word:** set `cards.rain_word` (e.g. `"TROY"`). The rain falls everywhere except
+  the letters, so the word shows up as dark shapes in the rain. Up to 5 letters are big, up to 10 small.
+- **Image shuffle:** put pictures in an `images` folder on the microSD card: animated **GIF**, **PNG** or
+  **JPG**. They're shown in random order; GIFs loop for the card's time. 64x32 looks best:
+  `python3 tools/make_images.py my_pictures out_folder` (needs `pip3 install pillow`) crops and resizes
+  photos and keeps GIFs animated (`--fit` adds black bars instead of cropping). Pin "Image shuffle" on the
+  phone page for a little photo frame. The clock reads the folder at startup.
 
 ### Spotify
 Spotify's developer apps now require the app owner to have **Premium**.
