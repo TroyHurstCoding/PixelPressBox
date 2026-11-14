@@ -14,6 +14,9 @@
 #include "../../src/weather.h"
 #include "../../src/holidays.h"
 #include "../../src/feeds.h"
+#include "../../src/feeds2.h"
+#include "../../src/motion.h"
+#include "../../src/astro.h"
 
 Settings CFG;
 static std::string FIXTURE;
@@ -463,6 +466,56 @@ static void test_batch2() {
   puts("ok  play-by-play text, standings (NFL division, NBA window), Teams presence, text folding/wrap, feeds");
 }
 
+static void test_batch3() {
+  // accelerometer: the board hangs chip-down, so standing upright reads about -256 on Z
+  float gx, gy, gz;
+  mapAxes(0, 0, -256, 1, 1, gx, gy, gz);
+  assert(gy > 0.99f && fabsf(gx) < 0.01f);
+  bool flat = false;
+  assert(classifyOrient(gx, gy, gz, 0, flat) == 0 && !flat);
+  assert(classifyOrient(0.95f, 0.1f, 0.1f, 0, flat) == 3);    // right edge down
+  assert(classifyOrient(-0.95f, 0.1f, 0.1f, 0, flat) == 1);   // left edge down
+  assert(classifyOrient(0.0f, -0.98f, 0.1f, 0, flat) == 2);   // upside down
+  assert(classifyOrient(0.6f, 0.6f, 0.2f, 3, flat) == 3);     // halfway: keep what we had
+  assert(classifyOrient(0.05f, 0.1f, 0.99f, 1, flat) == 1 && flat);
+  // OpenTDB url3986 text
+  assert(urlDecode("Who%20painted%20%22The%20Starry%20Night%22%3F") == "Who painted \"The Starry Night\"?");
+  // Billboard: Thu 2026-11-12 -> 20 years back is Sun 2006-11-12 -> its chart is dated Sat 2006-11-11
+  time_t t = parseIsoUtc("2026-11-12T20:00:00");
+  assert(chartDateFor(t, 20) == "2006-11-11");
+  assert(chartDateFor(parseIsoUtc("2026-11-14T20:00:00"), 30) == "1996-11-09");
+  // surf (Open-Meteo marine)
+  {
+    JsonDocument d;
+    deserializeJson(d, R"({"current":{"wave_height":1.20,"wave_period":10.95,"wave_direction":254,"sea_surface_temperature":23.1},"daily":{"wave_height_max":[1.5]}})");
+    SurfReport r;
+    assert(parseSurf(d, r) && r.ok && fabsf(r.waveFt - 3.94f) < 0.05f && r.waterF == 74 && r.dirDeg == 254);
+  }
+  // ESPN team schedule: newest completed game, from our side
+  {
+    JsonDocument d;
+    deserializeJson(d, R"({"events":[
+      {"date":"2026-09-26T02:10Z","competitions":[{"status":{"type":{"completed":true}},"competitors":[
+        {"team":{"abbreviation":"LAD"},"winner":false,"score":{"value":2}},{"team":{"abbreviation":"SF"},"winner":true,"score":{"value":3}}]}]},
+      {"date":"2026-09-27T19:05Z","competitions":[{"status":{"type":{"completed":true}},"competitors":[
+        {"team":{"abbreviation":"SF"},"winner":false,"score":{"value":1}},{"team":{"abbreviation":"LAD"},"winner":true,"score":{"value":5}}]}]},
+      {"date":"2026-09-28T19:05Z","competitions":[{"status":{"type":{"completed":false}},"competitors":[]}]}]})");
+    GameResult r;
+    assert(parseLastResult(d, "LAD", parseIsoUtc("2026-09-28T03:00:00"), r));
+    assert(r.won && r.us == "LAD" && r.them == "SF" && r.usScore == 5 && r.themScore == 1);
+  }
+  // astronomy: the June solstice sun sits over the Tropic of Cancer; Jupiter at its Dec 2024 opposition stood high
+  // in the south from LA at local midnight
+  double sl, so;
+  sunSubpoint(parseIsoUtc("2024-06-20T12:00:00"), sl, so);
+  assert(fabs(sl - 23.44) < 0.2 && fabs(so) < 2);
+  std::vector<PlanetPos> pp;
+  planetPositions(parseIsoUtc("2024-12-07T08:00:00"), 34.05, -118.24, pp);
+  assert(pp.size() == 5 && pp[3].alt > 70 && pp[3].az > 160 && pp[3].az < 210);
+  assert(String(compass8(250)) == "W" && String(compass8(10)) == "N" && String(compass8(225)) == "SW");
+  puts("ok  accelerometer orientation, trivia text, Billboard dates, surf, Fly the W, planets & sun");
+}
+
 int main() {
   CFG.favorites = {{"mlb", "LAD"}, {"nfl", "LV"}, {"nba", "LAL"}};
   CFG.showAll = {"nfl"};
@@ -477,5 +530,6 @@ int main() {
   test_sun_moon();
   test_ufc();
   test_batch2();
+  test_batch3();
   puts("all C++ logic tests passed");
 }

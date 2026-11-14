@@ -69,6 +69,42 @@ struct FightEvent {
   time_t start = 0, end = 0;
 };
 
+// ---- batch 3 data cards
+struct TriviaQ {
+  String category, question, answer;
+};
+struct FactQuote {
+  String text, author;  // author "" = a fun fact
+};
+struct ChartEntry {
+  String song, artist;
+};
+struct ChartWeek {
+  bool ok = false;
+  int yearsAgo = 0;
+  String date;                     // "2006-11-11"
+  std::vector<ChartEntry> top;     // #1..#3
+};
+struct SurfReport {
+  bool ok = false;
+  float waveFt = 0, periodS = 0;
+  int dirDeg = 0, waterF = 0;
+  float maxFtToday = 0;
+};
+struct IssFix {
+  bool ok = false;
+  float lat = 0, lon = 0;
+  uint32_t at = 0;                 // millis() of the fix (we extrapolate between fetches)
+  float dLonPerMin = 3.8f;         // drift in longitude per minute (the ISS laps the earth in ~92 min)
+};
+struct GameResult {
+  bool ok = false;
+  bool won = false;
+  String us, them;                 // abbreviations
+  int usScore = 0, themScore = 0;
+  time_t when = 0;                 // game start (UTC)
+};
+
 struct Countdown {
   String name;
   int year = 0, month = 0, day = 0;  // local date; year 0 = every year (birthdays, anniversaries)
@@ -137,6 +173,20 @@ struct Settings {
   bool historyGentle = true;               // skip "on this day" items about deaths and disasters
   bool teamsPresence = true;               // Teams status drives the busy light (needs Outlook sign-in)
   int ufcDays = 10;                        // show it when the event is this many days away (or live)
+  // batch 3: physics / ambient
+  bool cardAquarium = true, cardPendulum = true, cardCradle = true, cardWater = true;
+  // portrait-only screens (shown when the clock stands on its end, or orientation = "portrait")
+  bool cardBeer = true, cardPClock = true, cardHourglass = true, cardLava = true;
+  // batch 3: data cards
+  bool cardTrivia = true, cardFacts = true, cardBillboard = true, cardFlyW = true;
+  bool cardIss = true, cardPlanets = true, cardNationalDay = true, cardSurf = true, cardHackerNews = true;
+  std::vector<int> billboardYears{20, 30, 40};  // "this week N years ago"
+  String surfName = "VENICE";
+  float surfLat = 33.985f, surfLon = -118.475f;  // Venice Breakwater
+  // accelerometer (ADXL345): orientation auto | landscape | portrait; mirror flips which way portrait turns;
+  // tap = next card, double tap = focus timer, lying flat = screen off
+  String orientation = "auto";
+  bool accelMirror = false, accelTaps = true, flatSleep = true;
 
 
   std::vector<String> leagues{"nfl", "nba", "mlb"};

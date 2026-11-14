@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.12-2222",
+  "version": "2026.11.13-1643",
   "bin": "https://raw.githubusercontent.com/TroyHurstCoding/PixelPressBox/main/firmware/pixelpressbox-update.bin",
-  "size": 2852000,
-  "md5": "bfe0131f1a9c249b921bf20ec164f2f1"
+  "size": 2909040,
+  "md5": "4ed1c738d6dcaa0ae86ae3df87820224"
 }

@@ -93,6 +93,20 @@ static void textCenter(const String &s, int y, uint32_t color, int size = 1) {
 
 static void rect(int x, int y, int w, int h, uint32_t color) { dma->fillRect(x, y, w, h, c565(color)); }
 
+// ---- shared with render2.cpp (batch 3 screens). Rotation: 0 landscape, 1/3 portrait, 2 upside down.
+MatrixPanel_I2S_DMA *gfxPanel() { return dma; }
+void gfxBegin() { begin(); }
+void gfxEnd() { end(); }
+uint16_t gfxColor(uint32_t c) { return c565(c); }
+void gfxText(const String &s, int x, int y, uint32_t color, int size) { text(s, x, y, color, size); }
+static int curRotation = 0;
+void displaySetRotation(int r) {
+  r &= 3;
+  if (dma && r != curRotation) dma->setRotation(r);
+  curRotation = r;
+}
+int displayRotation() { return curRotation; }
+
 // ---------------------------------------------------------------- formatting
 String fmtStart(time_t start, time_t now) {
   if (!start) return "TBD";

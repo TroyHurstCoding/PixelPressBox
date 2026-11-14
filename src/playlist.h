@@ -6,7 +6,16 @@ enum CardKind { CARD_GAME, CARD_FANTASY, CARD_YAHOO, CARD_CLOCK, CARD_MEETING, C
                 CARD_HOLIDAY, CARD_SUNMOON, CARD_PROGRESS, CARD_WEATHER, CARD_UFC,
                 CARD_STANDINGS, CARD_HISTORY, CARD_WORD, CARD_JOKE, CARD_TETRIS, CARD_RAIN,
                 CARD_FIRE, CARD_BOUNCE, CARD_SNAKE, CARD_BREAKOUT, CARD_IMAGES, CARD_NIXIE, CARD_BIGCLOCK,
-                CARD_WORDCLOCK };
+                CARD_WORDCLOCK,
+                // batch 3
+                CARD_AQUARIUM, CARD_PENDULUM, CARD_CRADLE, CARD_WATER,
+                CARD_BEER, CARD_PCLOCK, CARD_HOURGLASS, CARD_LAVA,        // portrait
+                CARD_TRIVIA, CARD_FACT, CARD_BILLBOARD, CARD_FLYW, CARD_ISS, CARD_PLANETS, CARD_NATDAY,
+                CARD_SURF, CARD_HN };
+// true for the screens drawn 32 wide x 64 tall (the clock standing on its end)
+inline bool isPortraitCard(int k) { return k == CARD_BEER || k == CARD_PCLOCK || k == CARD_HOURGLASS || k == CARD_LAVA; }
+// screens that look right either way up (they follow gravity)
+inline bool isAnyOrientCard(int k) { return k == CARD_WATER; }
 
 constexpr int PRI_FAV_LIVE = 100, PRI_MEETING_SOON = 90, PRI_FAV_PRE = 60, PRI_FAV_FINAL = 55,
               PRI_MUSIC = 45, PRI_ALL_LIVE = 40, PRI_MEETING_LATER = 35, PRI_FANTASY = 30,

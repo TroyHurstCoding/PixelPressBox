@@ -1,5 +1,6 @@
 // Minimal Arduino shim so the ticker logic can be unit-tested on a desktop compiler.
 #pragma once
+inline unsigned long millis() { static unsigned long t = 0; return t += 33; }
 #include <strings.h>
 #include <algorithm>
 #include <cctype>

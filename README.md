@@ -171,6 +171,52 @@ of the Tronbyt community apps Nixel Clock, Big Clock and Fuzzy Clock (Apache-2.0
   photos and keeps GIFs animated (`--fit` adds black bars instead of cropping). Pin "Image shuffle" on the
   phone page for a little photo frame. The clock reads the folder at startup.
 
+### Batch 3 cards
+Turn any of them off under `"cards"` in config.json (keys in brackets).
+- **Aquarium** (`aquarium`): fish, swaying seaweed, rising bubbles. No internet needed.
+- **Double pendulum** (`double_pendulum`): chaotic physics with a fading color trail; never repeats.
+- **Newton's cradle** (`newtons_cradle`): five swinging balls. Without the accelerometer it plays by itself (1, 2, 3
+  balls in turn). With it, tilting the clock tilts the strings' "down", and a **tap** knocks the end ball.
+- **Water** (`water`): a tank of water that pours toward whichever way is down. Tilt the clock and it sloshes;
+  without the accelerometer it rocks gently by itself. Works in landscape and portrait.
+- **Trivia** (`trivia`): a question, a few seconds to think, then the answer. Questions from the Open Trivia Database
+  (opentdb.com, CC BY-SA 4.0).
+- **Fun fact / quote** (`facts_quotes`): alternates a random fact (uselessfacts.jsph.pl) and a quote ("Inspirational
+  quotes provided by ZenQuotes API", zenquotes.io).
+- **Billboard throwback** (`billboard`): the #1 (and #2) song this week 20, 30 and 40 years ago (`billboard_years`).
+  Chart data from github.com/mhollingshead/billboard-hot-100; Billboard and Hot 100 are Billboard Media's trademarks.
+- **Fly the W** (`fly_the_w`): after your MLB favorite wins (Dodgers), a waving white W flag with the score, for
+  about a day. Losses don't get a card.
+- **Space station map** (`iss_map`): a world map with the night side shaded and a blinking dot where the ISS is
+  right now (wheretheiss.at, every minute); a red dot marks home.
+- **Planets tonight** (`planets`): which of Mercury, Venus, Mars, Jupiter and Saturn are up, where to look and how
+  high, calculated on the clock from your weather location. In daytime it shows 9 PM tonight.
+- **National day** (`national_day`): "World Kindness Day" and friends (github.com/jvivona/tidbyt-data).
+- **Surf report** (`surf`): wave height range, period, direction and water temperature for a beach
+  (`"surf": {"name": "Venice", "lat": 33.985, "lon": -118.475}`), from Open-Meteo's free marine forecast.
+- **Hacker News** (`hacker_news`): the top 3 headlines.
+
+### Accelerometer and portrait mode
+The ADXL345 (GY-291 board) plugs into the board's 4-pin **I2C expansion port** (the small SH1.0 socket) with a
+STEMMA QT / Qwiic to female-socket cable (Adafruit 4397): VCC to VCC, GND to GND, SDA to SDA, SCL to SCL. On the GY-291
+also join **CS to VCC** (I2C mode); leave SDO unconnected (address 0x53). The clock finds it at startup; without it
+everything works as before.
+- **Tap** the case: next card. **Double tap:** focus timer. On the cradle and the beer glass a single tap plays with
+  the screen instead and a double tap moves on.
+- **Lay it flat** (on its face or back) for 2 seconds: the screen turns off; pick it up and it comes back.
+- **Upside down:** everything flips to read upright.
+- **Portrait:** stand it on either end and it switches to the tall screens, with the tall clock in between:
+  - **Beer glass** (`beer`): pours itself a pint, lets the head settle, then sips. Tilt it and the beer stays level;
+    tap it for a refill.
+  - **Tall clock** (`portrait_clock`): hours over minutes in big digits.
+  - **Hourglass** (`hourglass`): sand runs through the neck. Turn the clock over and it runs the other way; without
+    the accelerometer it turns itself over when it runs out.
+  - **Lava lamp** (`lava_lamp`): blobs heat at the bottom, rise, cool and sink.
+  - **Water** works standing up too.
+- Settings: `"motion": {"orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true}`.
+  `orientation` can force `"landscape"` or `"portrait"` (portrait screens even without the accelerometer).
+  If portrait shows upside down, set `"mirror": true` (it depends on which way the little board was mounted).
+
 ### Spotify
 Spotify's developer apps now require the app owner to have **Premium**.
 1. https://developer.spotify.com/dashboard → Create app, redirect URI `http://127.0.0.1:8888/callback`, Web API.

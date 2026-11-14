@@ -13,3 +13,14 @@ Their artwork is converted into src/tronbyt_assets.h by tools/gen_tronbyt_assets
 
 Changes: images converted to C arrays (RGB565 / 1-bit masks); layouts redrawn in C++ for the
 ESP32 HUB75 panel; the word clock uses a hand-drawn 4x6 capital font in place of Tidbyt's 5x8.
+
+Other data and sources:
+  World map (space station card): tools/gen_world_map.py builds src/world_map.h from global-land-mask
+  (github.com/toddkarin/global-land-mask, MIT), which uses the GLOBE 1 km land data (NOAA).
+  Planet positions: Paul Schlyter, "How to compute planetary positions" (stjarnhimlen.se), implemented in src/astro.cpp.
+  Trivia questions: Open Trivia Database (opentdb.com), CC BY-SA 4.0.
+  Quotes: ZenQuotes API (zenquotes.io). Facts: uselessfacts.jsph.pl.
+  Billboard Hot 100 history: github.com/mhollingshead/billboard-hot-100. Billboard and Hot 100 are trademarks of
+  Billboard Media, LLC; this project is not affiliated with Billboard.
+  National days: github.com/jvivona/tidbyt-data. Marine forecast: Open-Meteo (open-meteo.com).
+  ISS position: wheretheiss.at. Hacker News: the official Firebase API. Scores and schedules: ESPN.

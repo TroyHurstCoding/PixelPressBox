@@ -5,6 +5,7 @@
 #include "../../src/desk.h"
 #include "../../src/render.h"
 #include "../../src/holidays.h"
+#include "../../src/render2.h"
 #include "ESP32-HUB75-MatrixPanel-I2S-DMA.h"
 
 Settings CFG;
@@ -18,6 +19,21 @@ static void dump(const char *name) {
   for (int y = 0; y < 32; y++)
     for (int x = 0; x < 64; x++) {
       uint32_t c = p->shown[y][x];
+      unsigned char b[3] = {(unsigned char)(c >> 16), (unsigned char)(c >> 8), (unsigned char)c};
+      fwrite(b, 1, 3, f);
+    }
+  fclose(f);
+}
+
+// portrait screens: write the upright 32x64 view (undo rotation 1: physical x = 63 - y, y = x)
+static void dumpTall(const char *name) {
+  MatrixPanel_I2S_DMA *p = simPanel();
+  std::string path = std::string("out/") + name + ".ppm";
+  FILE *f = fopen(path.c_str(), "wb");
+  fprintf(f, "P6 32 64 255\n");
+  for (int y = 0; y < 64; y++)
+    for (int x = 0; x < 32; x++) {
+      uint32_t c = p->shown[x][63 - y];
       unsigned char b[3] = {(unsigned char)(c >> 16), (unsigned char)(c >> 8), (unsigned char)c};
       fwrite(b, 1, 3, f);
     }
@@ -153,5 +169,37 @@ int main() {
   CFG.bounceText = "DVD";
   for (int f = 0; f < 60; f++) drawBouncer(f);
   dump("46_bouncer_text");
+  // ---- batch 3
+  for (int f = 0; f < 120; f++) drawAquarium(f);
+  dump("50_aquarium");
+  for (int f = 0; f < 70; f++) drawDoublePendulum(f, f == 0);
+  dump("51_double_pendulum");
+  for (int f = 0; f < 14; f++) drawCradle(f, 0, 1, false, false, f == 0);
+  dump("52_newtons_cradle");
+  for (int f = 0; f < 60; f++) drawWater(f, 0.55f, 0.85f, true, f == 0);
+  dump("53_water_tilted");
+  GameResult gr;
+  gr.ok = gr.won = true; gr.us = "LAD"; gr.them = "SF"; gr.usScore = 5; gr.themScore = 1;
+  for (int f = 0; f < 9; f++) drawFlyW(gr, 0x005A9C, f);
+  dump("54_fly_the_w");
+  IssFix iss; iss.ok = true; iss.lat = 21.3f; iss.lon = -40.2f; iss.at = millis();
+  for (int f = 0; f < 9; f++) drawIssMap(iss, parseIsoUtc("2026-11-13T00:30:00"), 34.05f, -118.24f, f);
+  dump("55_iss_day_night");
+  drawPlanets(parseIsoUtc("2026-11-13T04:00:00"), 34.05f, -118.24f, 0); dump("56_planets_sky");
+  drawPlanets(parseIsoUtc("2026-11-13T04:00:00"), 34.05f, -118.24f, 1); dump("57_planets_list");
+  SurfReport sr; sr.ok = true; sr.waveFt = 3.9f; sr.periodS = 11; sr.dirDeg = 254; sr.waterF = 64;
+  for (int f = 0; f < 5; f++) drawSurf(sr, "VENICE", f);
+  dump("58_surf");
+  displaySetRotation(1);
+  for (int f = 0; f < 200; f++) drawBeer(f, 0, 1, false, false, f == 0);
+  dumpTall("60_beer_pour");
+  for (int f = 0; f < 60; f++) drawBeer(200 + f, 0.35f, 0.93f, true, false, false);
+  dumpTall("61_beer_tilted");
+  drawPortraitClock(parseIsoUtc("2026-11-13T00:47:00")); dumpTall("62_tall_clock");
+  for (int f = 0; f < 140; f++) drawHourglass(f, 1, false, f == 0);
+  dumpTall("63_hourglass");
+  for (int f = 0; f < 150; f++) drawLava(f, f == 0);
+  dumpTall("64_lava_lamp");
+  displaySetRotation(0);
   puts("rendered");
 }

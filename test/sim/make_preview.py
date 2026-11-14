@@ -9,7 +9,21 @@ cols = 3
 tiles = []
 for f in files:
     im = Image.open(f).convert("RGB")
+    iw, ih = im.size
     t = Image.new("RGB", (64 * S, 32 * S), (12, 12, 12))
+    if ih > iw:  # portrait screen: shrink the LED pitch so 64 rows fit the tile height
+        s2 = 32 * S // 64
+        t2 = Image.new("RGB", (iw * s2, ih * s2), (12, 12, 12))
+        d2 = ImageDraw.Draw(t2)
+        for y in range(ih):
+            for x in range(iw):
+                c = im.getpixel((x, y))
+                if c == (0, 0, 0):
+                    c = (28, 28, 28)
+                d2.ellipse([x * s2, y * s2, x * s2 + s2 - 1, y * s2 + s2 - 1], fill=c)
+        t.paste(t2, ((64 * S - iw * s2) // 2, 0))
+        tiles.append((os.path.basename(f)[3:-4].replace("_", " "), t))
+        continue
     d = ImageDraw.Draw(t)
     for y in range(32):
         for x in range(64):

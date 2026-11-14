@@ -5,6 +5,8 @@
 #include "model.h"
 
 bool displayBegin();
+void displaySetRotation(int r);   // 0 landscape, 1/3 portrait (32 wide x 64 tall), 2 upside down
+int displayRotation();
 void displaySetBrightness(uint8_t b);
 void drawMessage(const String &l1, const String &l2 = "", uint32_t color = 0xFFFFFF);
 void drawGame(const Game &g, time_t now, bool altPhase);

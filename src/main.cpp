@@ -26,6 +26,10 @@
 #include "weather.h"
 #include "espn.h"
 #include "playlist.h"
+#include <functional>
+#include "render2.h"
+#include "feeds2.h"
+#include "motion.h"
 #include "render.h"
 #include "scorewatch.h"
 #include "settings.h"
@@ -72,6 +76,23 @@ static WordOfDay wotd;
 static String joke;
 static int feedsDay = -1;  // day of month the daily feeds were last fetched
 static String pinKey;      // "" = rotate; otherwise the card to keep on screen (survives restarts)
+// batch 3 data
+static std::vector<TriviaQ> trivia;
+static size_t triviaIdx = 0;
+static FactQuote factQuote;
+static bool nextIsQuote = false;
+static std::vector<ChartWeek> charts;
+static size_t chartIdx = 0;
+static std::vector<String> natDays, hnTitles;
+static SurfReport surf;
+static IssFix iss;
+static GameResult flyW;
+static uint32_t nextTrivia = 0, nextFact = 0, nextHn = 0, nextSurf = 0, nextIss = 0, nextFlyW = 0, nextDaily3 = 0;
+static int daily3Day = -1;
+static bool cardWantsTaps = false, cardTapped = false;  // interactive screens take single taps themselves
+static bool flatSleeping = false;
+static uint32_t flatSince = 0;
+static char orientKey = 'L';  // L landscape, F upside down, P portrait
 
 static void savePin() {
   Preferences p;
@@ -157,6 +178,39 @@ static int pump(uint32_t ms) {
     }
     soundLoop();
     webLoop();
+    motionPoll();
+    if (motion().present) {
+      const Motion &m = motion();
+      if (CFG.flatSleep) {  // lying flat: screen off until it's picked up
+        if (m.flat) {
+          if (!flatSince) flatSince = millis();
+          if (!flatSleeping && millis() - flatSince > 2000) {
+            flatSleeping = true;
+            displaySetBrightness(0);
+          }
+        } else {
+          flatSince = 0;
+          if (flatSleeping) {
+            flatSleeping = false;
+            displaySetBrightness(isNight(nowUtc()) ? CFG.nightBrightness : CFG.brightness);
+          }
+        }
+      }
+      char ok = motionPortrait() ? 'P' : motionLandscapeRotation() == 2 ? 'F' : 'L';
+      if (ok != orientKey) {  // turned: rebuild for the new shape
+        orientKey = ok;
+        return 4;
+      }
+      if (CFG.accelTaps) {
+        int tap = motionTakeTap();
+        if (tap == 1) {
+          if (cardWantsTaps) cardTapped = true;
+          else return 1;  // tap: next card
+        } else if (tap == 2) {
+          return cardWantsTaps ? 1 : 2;  // double tap: next (on interactive screens) / focus timer
+        }
+      }
+    }
     if (webWantsRestart) {
       delay(300);
       ESP.restart();
@@ -379,6 +433,102 @@ static bool refreshData() {
     nextJoke = millis() + (ok ? 1800 : 300) * 1000UL;
   }
 
+  // ---- batch 3 feeds
+  if (CFG.cardTrivia && (int32_t)(millis() - nextTrivia) >= 0 && triviaIdx >= trivia.size()) {
+    std::vector<TriviaQ> t;
+    bool ok = fetchTrivia(t);
+    if (ok) {
+      Lock lock;
+      trivia = t;
+      triviaIdx = 0;
+    }
+    nextTrivia = millis() + (ok ? 600 : 300) * 1000UL;
+    changed |= ok;
+  }
+  if (CFG.cardFacts && (int32_t)(millis() - nextFact) >= 0) {
+    FactQuote f;
+    bool ok = nextIsQuote ? fetchQuote(f) : fetchFact(f);
+    if (ok) {
+      Lock lock;
+      factQuote = f;
+    }
+    nextIsQuote = !nextIsQuote;
+    nextFact = millis() + (ok ? 900 : 300) * 1000UL;
+    changed |= ok;
+  }
+  if (lt.tm_mday != daily3Day && now > 1700000000 && (int32_t)(millis() - nextDaily3) >= 0) {
+    bool ok = true;
+    if (CFG.cardBillboard) {
+      std::vector<ChartWeek> cw;
+      for (int y : CFG.billboardYears) {
+        ChartWeek w;
+        if (fetchChart(now, y, w)) cw.push_back(w);
+      }
+      if (!cw.empty()) {
+        Lock lock;
+        charts = cw;
+      } else ok = false;
+    }
+    if (CFG.cardNationalDay) {
+      std::vector<String> nd;
+      if (fetchNationalDays(nd)) {
+        Lock lock;
+        natDays = nd;
+      } else ok = false;
+    }
+    if (ok) daily3Day = lt.tm_mday;
+    else nextDaily3 = millis() + 15 * 60000UL;
+    changed = true;
+  }
+  if (CFG.cardHackerNews && (int32_t)(millis() - nextHn) >= 0) {
+    std::vector<String> t;
+    bool ok = fetchHackerNews(t, 5);
+    if (ok) {
+      Lock lock;
+      hnTitles = t;
+    }
+    nextHn = millis() + (ok ? 1800 : 300) * 1000UL;
+    changed |= ok;
+  }
+  if (CFG.cardSurf && (int32_t)(millis() - nextSurf) >= 0) {
+    SurfReport r;
+    bool ok = fetchSurf(CFG.surfLat, CFG.surfLon, r);
+    if (ok) {
+      Lock lock;
+      surf = r;
+    }
+    nextSurf = millis() + (ok ? 1800 : 300) * 1000UL;
+    changed |= ok;
+  }
+  if (CFG.cardIss && (int32_t)(millis() - nextIss) >= 0) {
+    IssFix f = iss;
+    bool ok = fetchIss(f);
+    if (ok) {
+      Lock lock;
+      iss = f;
+    }
+    nextIss = millis() + (ok ? 60 : 180) * 1000UL;
+  }
+  if (CFG.cardFlyW && (int32_t)(millis() - nextFlyW) >= 0) {
+    String team;
+    for (auto &f : CFG.favorites)
+      if (f.first == "mlb") {
+        team = f.second;
+        break;
+      }
+    bool ok = false;
+    if (team.length()) {
+      GameResult r;
+      ok = fetchLastResult(team, now, r);
+      if (ok) {
+        Lock lock;
+        flyW = r;
+      }
+    }
+    nextFlyW = millis() + (ok ? 1200 : 600) * 1000UL;
+    changed |= ok;
+  }
+
   if (CFG.ufc && (int32_t)(millis() - nextUfc) >= 0) {
     std::vector<FightEvent> u;
     bool ok = fetchUfc(u);
@@ -462,6 +612,42 @@ static void rebuild() {
   if (CFG.cardNixie && CFG.clockStyle != "nixie") ambient(CARD_NIXIE, "nixie", 10, PRI_AMBIENT);
   if (CFG.cardBigClock && CFG.clockStyle != "big") ambient(CARD_BIGCLOCK, "bigclock", 10, PRI_AMBIENT);
   if (CFG.cardWordClock && CFG.clockStyle != "words") ambient(CARD_WORDCLOCK, "wordclock", 10, PRI_AMBIENT);
+  if (CFG.cardAquarium) ambient(CARD_AQUARIUM, "aquarium", 15, PRI_AMBIENT);
+  if (CFG.cardPendulum) ambient(CARD_PENDULUM, "pendulum", 15, PRI_AMBIENT);
+  if (CFG.cardCradle) ambient(CARD_CRADLE, "cradle", 15, PRI_AMBIENT);
+  if (CFG.cardWater) ambient(CARD_WATER, "water", 15, PRI_AMBIENT);
+  if (CFG.cardTrivia && triviaIdx < trivia.size()) ambient(CARD_TRIVIA, "trivia", 14, PRI_AMBIENT + 2);
+  if (CFG.cardFacts && factQuote.text.length()) ambient(CARD_FACT, "fact", 10, PRI_AMBIENT + 1);
+  if (CFG.cardBillboard && !charts.empty()) ambient(CARD_BILLBOARD, "billboard", 10, PRI_AMBIENT + 1);
+  if (CFG.cardNationalDay && !natDays.empty()) ambient(CARD_NATDAY, "natday", 8, PRI_AMBIENT + 2);
+  if (CFG.cardHackerNews && !hnTitles.empty()) ambient(CARD_HN, "hn", 12, PRI_AMBIENT + 1);
+  if (CFG.cardSurf && surf.ok) ambient(CARD_SURF, "surf", 8, PRI_AMBIENT + 1);
+  if (CFG.cardIss && iss.ok) ambient(CARD_ISS, "iss", 10, PRI_AMBIENT + 1);
+  if (CFG.cardPlanets && CFG.lat != 0) ambient(CARD_PLANETS, "planets", 10, PRI_AMBIENT + 1);
+  if (CFG.cardFlyW && flyW.ok && flyW.won && now - flyW.when < 22 * 3600) ambient(CARD_FLYW, "flyw", 10, PRI_FAV_FINAL - 1);
+  if (motionPortrait()) {  // standing on its end: only the tall screens (and water, which follows gravity)
+    std::vector<Card> p;
+    auto add = [&](CardKind k, const char *key, int dwell) {
+      Card c;
+      c.kind = k;
+      c.key = key;
+      c.dwell = dwell;
+      c.pri = PRI_AMBIENT;
+      p.push_back(c);
+    };
+    std::vector<std::pair<CardKind, const char *>> tall;
+    if (CFG.cardBeer) tall.push_back({CARD_BEER, "beer"});
+    if (CFG.cardHourglass) tall.push_back({CARD_HOURGLASS, "hourglass"});
+    if (CFG.cardLava) tall.push_back({CARD_LAVA, "lava"});
+    if (CFG.cardWater) tall.push_back({CARD_WATER, "water"});
+    for (auto &t : tall) {
+      if (CFG.cardPClock) add(CARD_PCLOCK, "pclock", CFG.clockDwell);
+      add(t.first, t.second, 20);
+    }
+    if (p.empty()) add(CARD_PCLOCK, "pclock", CFG.clockDwell);
+    rot.update(p);
+    return;
+  }
   std::vector<Card> cards = buildCards(all, now, extra);
   if (favOnly || CFG.sports == "favorites") {  // drop non-favorite games, keep everything else
     std::vector<Card> f;
@@ -543,7 +729,155 @@ static int scrollFor(const String &txt, int dwellMs, int x0, Draw draw) {
   return 0;
 }
 
+// gravity in the rotated screen's own terms
+static void logicalGravity(int rot, float &x, float &y) {
+  const Motion &m = motion();
+  switch (rot) {
+    case 1: x = m.gy, y = -m.gx; break;
+    case 2: x = -m.gx, y = -m.gy; break;
+    case 3: x = -m.gy, y = m.gx; break;
+    default: x = m.gx, y = m.gy;
+  }
+}
+
+// batch 3 screens; -1 = not one of them
+static int showCard3(const Card *c) {
+  const bool accel = motion().present;
+  auto animate = [&](int frameMs, std::function<void(int)> draw) {
+    uint32_t t0 = millis();
+    for (int f = 0; millis() - t0 < (uint32_t)c->dwell * 1000; f++) {
+      draw(f);
+      int r = pump(frameMs);
+      if (r) return r;
+    }
+    return 0;
+  };
+  auto textPages = [&](const String &title, uint32_t tc, const String &right, uint32_t rc, const String &body) {
+    std::vector<String> lines = wrapText(foldAscii(body), 10);
+    int maxOff = std::max(0, (int)lines.size() * 8 - 21);
+    drawTextCard(title, tc, right, rc, lines, 0);
+    int r = pump(maxOff ? 2200 : c->dwell * 1000);
+    if (r) return r;
+    for (int off = 1; off <= maxOff; off++) {
+      drawTextCard(title, tc, right, rc, lines, off);
+      r = pump(80);
+      if (r) return r;
+    }
+    return maxOff ? pump(2500) : 0;
+  };
+  switch (c->kind) {
+    case CARD_AQUARIUM: return animate(40, [&](int f) { drawAquarium(f); });
+    case CARD_PENDULUM: return animate(33, [&](int f) { drawDoublePendulum(f, f == 0); });
+    case CARD_CRADLE:
+      return animate(33, [&](int f) {
+        float gx, gy;
+        logicalGravity(displayRotation(), gx, gy);
+        bool kick = cardTapped;
+        cardTapped = false;
+        drawCradle(f, gx, gy, accel, kick, f == 0);
+      });
+    case CARD_WATER:
+      return animate(40, [&](int f) { drawWater(f, motion().gx, motion().gy, accel, false); });
+    case CARD_BEER:
+      return animate(33, [&](int f) {
+        float gx, gy;
+        logicalGravity(displayRotation(), gx, gy);
+        bool tap = cardTapped;
+        cardTapped = false;
+        drawBeer(f, gx, gy, accel, tap, f == 0);
+      });
+    case CARD_PCLOCK: {
+      uint32_t t0 = millis();
+      while (millis() - t0 < (uint32_t)c->dwell * 1000) {
+        drawPortraitClock(nowUtc());
+        int r = pump(500);
+        if (r) return r;
+      }
+      return 0;
+    }
+    case CARD_HOURGLASS:
+      return animate(40, [&](int f) {
+        float gx, gy;
+        logicalGravity(displayRotation(), gx, gy);
+        drawHourglass(f, gy, accel, f == 0);
+      });
+    case CARD_LAVA: return animate(50, [&](int f) { drawLava(f, false); });
+    case CARD_FLYW: {
+      uint32_t col = 0x005A9C;  // Dodger blue; other teams get a bright blue
+      if (!flyW.us.equalsIgnoreCase("LAD")) col = 0x2F6BFF;
+      GameResult r = flyW;
+      return animate(50, [&](int f) { drawFlyW(r, col, f); });
+    }
+    case CARD_ISS: {
+      IssFix f0 = iss;
+      return animate(100, [&](int f) { drawIssMap(f0, nowUtc(), CFG.lat, CFG.lon, f); });
+    }
+    case CARD_PLANETS: {
+      drawPlanets(nowUtc(), CFG.lat, CFG.lon, 0);
+      int r = pump(c->dwell * 600);
+      if (r) return r;
+      drawPlanets(nowUtc(), CFG.lat, CFG.lon, 1);
+      return pump(c->dwell * 400);
+    }
+    case CARD_SURF: {
+      SurfReport s0 = surf;
+      return animate(60, [&](int f) { drawSurf(s0, CFG.surfName, f); });
+    }
+    case CARD_TRIVIA: {
+      if (triviaIdx >= trivia.size()) return 0;
+      TriviaQ q = trivia[triviaIdx++];
+      String cat = q.category.substring(0, 5);
+      cat.toUpperCase();
+      int r = textPages("TRIVIA", 0xB070FF, cat, 0x707070, q.question);
+      if (r) return r;
+      r = pump(3000);  // think...
+      if (r) return r;
+      return textPages("ANSWER", 0x20FF40, "", 0, q.answer);
+    }
+    case CARD_FACT:
+      if (factQuote.author.length())
+        return textPages("QUOTE", 0x40C0FF, "", 0, factQuote.text + "  - " + factQuote.author);
+      return textPages("FUN FACT", 0xFFC000, "", 0, factQuote.text);
+    case CARD_BILLBOARD: {
+      if (charts.empty()) return 0;
+      const ChartWeek &w = charts[chartIdx++ % charts.size()];
+      String title = "#1 IN " + w.date.substring(0, 4);
+      String body = w.top[0].song + " - " + w.top[0].artist;
+      if (w.top.size() > 1 && w.top[1].song.length()) body += "  #2 " + w.top[1].song;
+      return textPages(title, 0xFFD040, String(w.yearsAgo) + "Y", 0x707070, body);
+    }
+    case CARD_NATDAY: {
+      String body;
+      for (size_t i = 0; i < natDays.size() && i < 4; i++) body += (i ? "  " : "") + natDays[i] + ".";
+      return textPages("TODAY IS", 0xFF70B0, "", 0, body);
+    }
+    case CARD_HN: {
+      for (size_t i = 0; i < hnTitles.size() && i < 3; i++) {
+        int r = textPages("HACKER NEWS", 0xFF6600, "", 0, hnTitles[i]);
+        if (r) return r;
+      }
+      return 0;
+    }
+    default: return -1;
+  }
+}
+
+static int showCardInner(const Card *c);
+
 static int showCard(const Card *c) {
+  int k = c ? c->kind : CARD_CLOCK;
+  if (isPortraitCard(k)) displaySetRotation(motion().present && motion().orient == 3 ? 3 : 1);
+  else if (isAnyOrientCard(k)) displaySetRotation(0);
+  else displaySetRotation(motionLandscapeRotation());
+  cardWantsTaps = (k == CARD_CRADLE || k == CARD_BEER);
+  cardTapped = false;
+  int r = c ? showCard3(c) : -1;
+  if (r < 0) r = showCardInner(c);
+  cardWantsTaps = false;
+  return r;
+}
+
+static int showCardInner(const Card *c) {
   if (msLoginPending()) {  // Outlook sign-in: show the code until it's entered
     drawMessage(msUserCode(), "see phone", 0xFFC000);
     int r = pump(2000);
@@ -866,6 +1200,8 @@ void setup() {
   bool sdOk = sdBegin();
   Serial.printf("[sd] %s\n", sdOk ? "card found" : "NO CARD (using built-in settings, no sound)");
   loadSettings();
+  motionBegin();  // ADXL345 on the I2C port (optional)
+  orientKey = motionPortrait() ? 'P' : 'L';
   Serial.printf("[display] driver=%s brightness=%d swap_gb=%d\n", CFG.panelDriver.c_str(), CFG.brightness,
                 CFG.swapGreenBlue);
   while (!displayBegin()) {  // without a display nothing else is useful; say so instead of crashing
@@ -910,7 +1246,7 @@ void setup() {
 
 void loop() {
   time_t now = nowUtc();
-  displaySetBrightness(isNight(now) ? CFG.nightBrightness : CFG.brightness);
+  displaySetBrightness(flatSleeping ? 0 : isNight(now) ? CFG.nightBrightness : CFG.brightness);
   soundSetVolume(CFG.volume);
 
   if (WiFi.status() != WL_CONNECTED) {
@@ -919,6 +1255,7 @@ void loop() {
     pump(3000);
     return;
   }
+  displaySetRotation(motionLandscapeRotation());  // messages, focus, celebrations: landscape (or upside down)
   rebuild();  // cheap; keeps "IN 12M" style titles fresh. The rotator keeps its place.
   updateStatus();
   while (!pendingCelebrations.empty()) {

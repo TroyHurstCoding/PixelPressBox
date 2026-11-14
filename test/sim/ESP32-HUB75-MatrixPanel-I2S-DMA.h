@@ -29,9 +29,21 @@ class MatrixPanel_I2S_DMA {
   void setBrightness8(uint8_t) {}
   void setTextWrap(bool) {}
   void clearScreen() { memset(px, 0, sizeof px); }
-  void fillScreen(uint32_t c) { fillRect(0, 0, 64, 32, c); }
+  void fillScreen(uint32_t c) { fillRect(0, 0, width(), height(), c); }
   void flipDMABuffer() { memcpy(shown, px, sizeof px); }
-  void drawPixel(int x, int y, uint32_t c) { if (x >= 0 && x < 64 && y >= 0 && y < 32) px[y][x] = rgb(c); }
+  int rotation = 0;  // same mapping as the real driver's transform()
+  void setRotation(int r) { rotation = r & 3; }
+  int width() const { return rotation & 1 ? 32 : 64; }
+  int height() const { return rotation & 1 ? 64 : 32; }
+  void drawPixel(int x, int y, uint32_t c) {
+    int t;
+    switch (rotation) {
+      case 1: t = 63 - y; y = x; x = t; break;
+      case 2: x = 63 - x; y = 31 - y; break;
+      case 3: t = y; y = 31 - x; x = t; break;
+    }
+    if (x >= 0 && x < 64 && y >= 0 && y < 32) px[y][x] = rgb(c);
+  }
   void fillRect(int x, int y, int w, int h, uint32_t c) {
     for (int j = y; j < y + h; j++) for (int i = x; i < x + w; i++) drawPixel(i, j, c);
   }

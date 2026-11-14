@@ -125,6 +125,23 @@ String cardLabel(const Card &c) {
     case CARD_NIXIE: return "Nixie clock";
     case CARD_BIGCLOCK: return "Big clock";
     case CARD_WORDCLOCK: return "Word clock";
+    case CARD_AQUARIUM: return "Aquarium";
+    case CARD_PENDULUM: return "Double pendulum";
+    case CARD_CRADLE: return "Newton's cradle";
+    case CARD_WATER: return "Water (tilt it)";
+    case CARD_BEER: return "Beer glass (portrait)";
+    case CARD_PCLOCK: return "Tall clock (portrait)";
+    case CARD_HOURGLASS: return "Hourglass (portrait)";
+    case CARD_LAVA: return "Lava lamp (portrait)";
+    case CARD_TRIVIA: return "Trivia";
+    case CARD_FACT: return "Fun fact / quote";
+    case CARD_BILLBOARD: return "Billboard throwback";
+    case CARD_FLYW: return "Fly the W";
+    case CARD_ISS: return "Space station map";
+    case CARD_PLANETS: return "Planets tonight";
+    case CARD_NATDAY: return "National day";
+    case CARD_SURF: return "Surf report";
+    case CARD_HN: return "Hacker News";
   }
   return c.key;
 }

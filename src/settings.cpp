@@ -153,6 +153,35 @@ bool loadSettings(const char *path) {
   c.autoUpdate = d["auto_update"]["enabled"] | c.autoUpdate;
   c.autoUpdateHour = d["auto_update"]["hour"] | c.autoUpdateHour;
   c.autoUpdateManifest = d["auto_update"]["manifest"] | c.autoUpdateManifest.c_str();
+  c.cardAquarium = cards["aquarium"] | c.cardAquarium;
+  c.cardPendulum = cards["double_pendulum"] | c.cardPendulum;
+  c.cardCradle = cards["newtons_cradle"] | c.cardCradle;
+  c.cardWater = cards["water"] | c.cardWater;
+  c.cardBeer = cards["beer"] | c.cardBeer;
+  c.cardPClock = cards["portrait_clock"] | c.cardPClock;
+  c.cardHourglass = cards["hourglass"] | c.cardHourglass;
+  c.cardLava = cards["lava_lamp"] | c.cardLava;
+  c.cardTrivia = cards["trivia"] | c.cardTrivia;
+  c.cardFacts = cards["facts_quotes"] | c.cardFacts;
+  c.cardBillboard = cards["billboard"] | c.cardBillboard;
+  c.cardFlyW = cards["fly_the_w"] | c.cardFlyW;
+  c.cardIss = cards["iss_map"] | c.cardIss;
+  c.cardPlanets = cards["planets"] | c.cardPlanets;
+  c.cardNationalDay = cards["national_day"] | c.cardNationalDay;
+  c.cardSurf = cards["surf"] | c.cardSurf;
+  c.cardHackerNews = cards["hacker_news"] | c.cardHackerNews;
+  if (d["billboard_years"].is<JsonArrayConst>()) {
+    c.billboardYears.clear();
+    for (JsonVariantConst y : d["billboard_years"].as<JsonArrayConst>()) c.billboardYears.push_back(y.as<int>());
+  }
+  c.surfName = d["surf"]["name"] | c.surfName.c_str();
+  c.surfName.toUpperCase();
+  c.surfLat = d["surf"]["lat"] | c.surfLat;
+  c.surfLon = d["surf"]["lon"] | c.surfLon;
+  c.orientation = d["motion"]["orientation"] | c.orientation.c_str();
+  c.accelMirror = d["motion"]["mirror"] | c.accelMirror;
+  c.accelTaps = d["motion"]["taps"] | c.accelTaps;
+  c.flatSleep = d["motion"]["flat_sleep"] | c.flatSleep;
   c.ufc = d["ufc"]["show"] | c.ufc;
   c.ufcDays = d["ufc"]["days_ahead"] | c.ufcDays;
 
