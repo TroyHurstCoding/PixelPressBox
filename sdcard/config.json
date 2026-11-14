@@ -26,7 +26,7 @@
              "iss_map": true, "planets": true, "national_day": true, "surf": true, "hacker_news": true },
   "billboard_years": [20, 30, 40],
   "surf": { "name": "Venice", "lat": 33.985, "lon": -118.475 },
-  "motion": { "orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true },
+  "motion": { "orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true, "pitch_invert": false },
   "ufc": { "show": true, "days_ahead": 10 },
 
   "leagues": ["nfl", "nba", "mlb"],

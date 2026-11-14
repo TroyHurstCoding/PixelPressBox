@@ -182,6 +182,7 @@ bool loadSettings(const char *path) {
   c.accelMirror = d["motion"]["mirror"] | c.accelMirror;
   c.accelTaps = d["motion"]["taps"] | c.accelTaps;
   c.flatSleep = d["motion"]["flat_sleep"] | c.flatSleep;
+  c.pitchInvert = d["motion"]["pitch_invert"] | c.pitchInvert;
   c.ufc = d["ufc"]["show"] | c.ufc;
   c.ufcDays = d["ufc"]["days_ahead"] | c.ufcDays;
 

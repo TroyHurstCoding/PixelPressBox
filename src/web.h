@@ -23,4 +23,5 @@ extern String webStatusLine;        // shown at the top of the phone page (set b
 extern String webPinRequest;
 extern volatile bool webPinChanged;
 extern volatile bool webCheckUpdate;  // "Check for update" pressed
+extern volatile int webGameCmd;       // -2 nothing, -1 stop the game, 0..6 play that game, 99 open the games menu
 extern String webCardsJson;         // {"pinned":"...","cards":[{"k":"clock","l":"Clock"},...]} (set by the main loop)

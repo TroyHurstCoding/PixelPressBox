@@ -17,6 +17,7 @@ bool motionBegin();              // probe + configure; false if no accelerometer
 void motionPoll();               // read at most every 20 ms; call often
 const Motion &motion();
 int motionTakeTap();             // 0 none, 1 single tap, 2 double tap (cleared when read)
+bool motionTakeShake();          // a few hard shakes in a row (cleared when read): opens the games menu
 bool motionPortrait();           // orient 1 or 3 (or the config forces portrait)
 int motionLandscapeRotation();   // 0, or 2 when the clock stands upside down
 

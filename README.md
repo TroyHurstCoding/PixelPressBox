@@ -213,9 +213,24 @@ everything works as before.
     the accelerometer it turns itself over when it runs out.
   - **Lava lamp** (`lava_lamp`): blobs heat at the bottom, rise, cool and sink.
   - **Water** works standing up too.
-- Settings: `"motion": {"orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true}`.
+- Settings: `"motion": {"orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true, "pitch_invert": false}`.
   `orientation` can force `"landscape"` or `"portrait"` (portrait screens even without the accelerometer).
   If portrait shows upside down, set `"mirror": true` (it depends on which way the little board was mounted).
+
+### Games
+**Shake** the clock (a few firm shakes) or use **Games** on the phone page to open the games menu. Tilt left/right
+to pick a game, tap to start. In a game, **double tap** (or **Stop** on the phone) goes back to the cards. After a
+game over, tap to play again; otherwise it returns to the menu. Best scores are kept on the clock.
+- **Dodger:** fly a plane low through a forest. Tilt to bank around the trees.
+- **TiltyBird:** lean the clock back to climb, forward to dive, through the gaps in the pipes.
+- **MarbleRun:** tilt a marble through a maze to the exit before time runs out; each maze adds time.
+- **Catch:** tilt to move the basket. Catch apples and gold, dodge bombs. Three lives.
+- **Breakout:** tilt to move the paddle and clear the bricks.
+- **Racer:** steer down a winding road around the traffic.
+- **Balance:** keep a ball on a see-saw while wind gusts push it.
+"Lean back" is measured from how you're holding the clock when the game starts. If it comes out backwards, set
+`"motion": {"pitch_invert": true}`. Without the accelerometer the games play themselves as a demo (a minute each).
+Desktop check: `test/sim/games_sim.cpp` plays every game on its autopilot.
 
 ### Spotify
 Spotify's developer apps now require the app owner to have **Premium**.

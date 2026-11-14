@@ -30,6 +30,7 @@
 #include "render2.h"
 #include "feeds2.h"
 #include "motion.h"
+#include "games.h"
 #include "render.h"
 #include "scorewatch.h"
 #include "settings.h"
@@ -161,7 +162,7 @@ static void startFocus(int minutes, bool brk);
 static void stopFocus();
 
 // Returns 1 = next card, 2 = press (focus timer), 3 = favorites toggle, 4 = state changed (redraw now),
-// 0 = timed out
+// 5 = games (phone page or a shake), 0 = timed out
 static int pump(uint32_t ms) {
   uint32_t t0 = millis();
   while (millis() - t0 < ms) {
@@ -201,6 +202,10 @@ static int pump(uint32_t ms) {
         orientKey = ok;
         return 4;
       }
+      if (motionTakeShake()) {
+        webGameCmd = 99;  // shake: games menu
+        return 5;
+      }
       if (CFG.accelTaps) {
         int tap = motionTakeTap();
         if (tap == 1) {
@@ -221,6 +226,10 @@ static int pump(uint32_t ms) {
       int us = s.indexOf('_');
       if (us > 0) soundPlay(s.substring(us + 1), s.substring(0, us));
       else soundPlay(s);
+    }
+    if (webGameCmd != -2) {
+      if (webGameCmd == -1) webGameCmd = -2;  // "Stop" with no game running: nothing to do
+      else return 5;
     }
     if (webNext) {
       webNext = false;
@@ -1244,6 +1253,173 @@ void setup() {
   xTaskCreatePinnedToCore(netTask, "net", 16384, nullptr, 1, nullptr, 0);
 }
 
+// ---- games ----------------------------------------------------------------------------------------------
+// The game loop keeps the essentials of pump() running (phone page, sound, net handover, taps) but not the
+// orientation check: hard tilting is the whole point here. Double tap or the phone's Stop quits.
+static int bestCache[G_COUNT];
+static bool bestLoaded = false;
+static int gameBest(int id) {
+  if (bestLoaded) return bestCache[id];
+  Preferences p;
+  p.begin("games", true);
+  for (int i = 0; i < G_COUNT; i++) bestCache[i] = p.getInt(("b" + String(i)).c_str(), 0);
+  p.end();
+  bestLoaded = true;
+  return bestCache[id];
+}
+static void gameSaveBest(int id, int v) {
+  Preferences p;
+  p.begin("games", false);
+  p.putInt(("b" + String(id)).c_str(), v);
+  p.end();
+  bestCache[id] = v;
+}
+
+// One slice of housekeeping. Returns: 0 nothing, 1 tap, 2 double tap / quit, 10+N phone asked for game N,
+// 99 phone asked for the menu.
+static int gameTick() {
+  xSemaphoreGiveRecursive(dataMtx);
+  vTaskDelay(1);
+  xSemaphoreTakeRecursive(dataMtx, portMAX_DELAY);
+  soundLoop();
+  webLoop();
+  motionPoll();
+  if (webWantsRestart) {
+    delay(300);
+    ESP.restart();
+  }
+  if (webGameCmd != -2) {
+    int c = webGameCmd;
+    webGameCmd = -2;
+    if (c == -1) return 2;
+    if (c == 99) return 99;
+    return 10 + c;
+  }
+  if (webNext) {
+    webNext = false;
+    return 2;
+  }
+  if (motion().present) {
+    motionTakeShake();  // shaking is fair play inside a game
+    int t = motionTakeTap();
+    if (t) return t;
+  }
+  if (int w = pollWheel()) return w == 1 ? 1 : 2;  // wheel: turn = tap, press = quit
+  return 0;
+}
+
+static GameInput readTilt(float basePitch, int rotation) {
+  GameInput in;
+  const Motion &m = motion();
+  float s = rotation == 2 ? -1 : 1;  // upside down: left/right and back/forward swap
+  in.roll = constrain(s * m.gx / 0.5f, -1.0f, 1.0f);
+  float pv = s * -(m.gz - basePitch) / 0.5f;
+  if (CFG.pitchInvert) pv = -pv;
+  in.pitch = constrain(pv, -1.0f, 1.0f);
+  return in;
+}
+
+static void runGames(int start) {
+  int rotation = motionLandscapeRotation();
+  displaySetRotation(rotation);
+  bool tilt = motion().present;
+  int sel = start >= 0 && start < G_COUNT ? start : 0;
+  bool inMenu = start < 0 || start >= G_COUNT;
+  int frame = 0;
+  while (true) {
+    if (inMenu) {  // tilt left/right to choose, tap to play; idle 20 s = back to the cards
+      uint32_t idle = millis(), lastMove = 0;
+      while (true) {
+        int t = gameTick();
+        if (t == 2) return;
+        if (t >= 10 && t < 10 + G_COUNT) {
+          sel = t - 10;
+          break;
+        }
+        if (t == 1) break;
+        if (tilt) {
+          float r = readTilt(0, rotation).roll;
+          if (fabsf(r) > 0.45f && millis() - lastMove > 450) {
+            sel = (sel + (r > 0 ? 1 : G_COUNT - 1)) % G_COUNT;
+            lastMove = idle = millis();
+          }
+        } else if (millis() - idle > 2500) {  // no accelerometer: the menu flips through, then demos one
+          sel = (sel + 1) % G_COUNT;
+          if (millis() - idle > 6000) break;
+        }
+        if (millis() - idle > 20000) return;
+        drawGameMenu(sel, gameBest(sel), frame++);
+        delay(33);
+      }
+    }
+    inMenu = false;
+    // ready
+    uint32_t t0 = millis();
+    while (millis() - t0 < 1500) {
+      int t = gameTick();
+      if (t == 2) return;
+      drawGameReady(sel, frame++);
+      delay(33);
+    }
+    float basePitch = tilt ? motion().gz : 0;  // "lean back" is measured from how you were holding it
+    gameReset(sel, esp_random());
+    uint32_t started = millis(), next = millis();
+    int quit = 0;
+    while (true) {
+      int t = gameTick();
+      if (t == 2 || t == 99 || t >= 10) {
+        quit = t;
+        break;
+      }
+      GameInput in = tilt ? readTilt(basePitch, rotation) : gameAutopilot(sel);
+      in.tap = tilt ? t == 1 : in.tap;
+      if (!gameStep(sel, in)) break;
+      if (!tilt && millis() - started > 60000) break;  // demo mode: a minute each
+      gameDraw(sel, frame++);
+      next += 33;
+      int32_t wait = (int32_t)(next - millis());
+      if (wait > 0) delay(wait);
+      else next = millis();
+    }
+    if (quit == 2) return;
+    if (quit == 99) {
+      inMenu = true;
+      continue;
+    }
+    if (quit >= 10) {
+      sel = quit - 10;
+      continue;
+    }
+    int sc = gameScore(sel), best = gameBest(sel);
+    bool nb = tilt && sc > best;
+    if (nb) {
+      gameSaveBest(sel, sc);
+      if (soundReady) soundPlay("win");
+    }
+    t0 = millis();
+    bool again = false;
+    while (millis() - t0 < 5000) {  // tap: play again; double tap: done; otherwise back to the menu
+      int t = gameTick();
+      if (t == 2) return;
+      if (t == 1 && millis() - t0 > 700) {
+        again = true;
+        break;
+      }
+      if (t >= 10 && t < 10 + G_COUNT) {
+        sel = t - 10;
+        again = true;
+        break;
+      }
+      drawGameOver(sel, sc, nb ? sc : best, nb, frame++);
+      delay(33);
+    }
+    if (!again) {
+      if (!tilt) sel = (sel + 1) % G_COUNT;  // demo: move on to the next game
+      inMenu = tilt;
+    }
+  }
+}
+
 void loop() {
   time_t now = nowUtc();
   displaySetBrightness(flatSleeping ? 0 : isNight(now) ? CFG.nightBrightness : CFG.brightness);
@@ -1272,6 +1448,14 @@ void loop() {
   updateCardsJson();
   if (pinKey.length() && !rot.select(pinKey)) rot.select("clock");  // pinned card gone for now (game over?): clock
   int r = showCard(rot.current());
+  if (r == 5) {
+    int g = webGameCmd;
+    webGameCmd = -2;
+    runGames(g == 99 ? -1 : g);
+    motionTakeTap();
+    orientKey = 0;  // re-check the orientation on the way out
+    return;
+  }
   if (r == 2) {
     startFocus(CFG.focusMinutes, false);
   } else if (r == 3) {

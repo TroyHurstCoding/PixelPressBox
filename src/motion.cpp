@@ -25,6 +25,9 @@ int classifyOrient(float gx, float gy, float gz, int prev, bool &flat) {
 static const uint8_t ADDR = 0x53;
 static Motion M;
 static int pendingTap = 0;
+static bool pendingShake = false;
+static uint32_t spikeAt[6];
+static int spikeN = 0;
 static uint32_t lastRead = 0, orientSince = 0;
 static int candidate = 0;
 static int xSign = 1, zSign = 1;
@@ -96,6 +99,17 @@ void motionPoll() {
   if (!readRaw(x, y, z)) return;
   float gx, gy, gz;
   mapAxes(x, y, z, xSign, zSign, gx, gy, gz);
+  float mag = sqrtf(gx * gx + gy * gy + gz * gz);
+  if (fabsf(mag - 1.0f) > 0.9f) {  // shake: 4 hard jolts within 0.8 s (a single tap is too short to count)
+    if (!spikeN || millis() - spikeAt[(spikeN - 1) % 6] > 60) spikeAt[spikeN++ % 6] = millis();
+    if (spikeN >= 4) {
+      uint32_t first = spikeAt[(spikeN - 4) % 6];
+      if (millis() - first < 800 && millis() - first > 180) {
+        pendingShake = true;
+        spikeN = 0;
+      }
+    }
+  }
   const float a = 0.25f;  // smooth out jitter
   M.gx += a * (gx - M.gx);
   M.gy += a * (gy - M.gy);
@@ -123,7 +137,13 @@ int motionTakeTap() {
   pendingTap = 0;
   return t;
 }
+bool motionTakeShake() {
+  bool s = pendingShake;
+  pendingShake = false;
+  return s;
+}
 #else
+bool motionTakeShake() { return false; }
 static Motion M;
 bool motionBegin() { return false; }
 void motionPoll() {}

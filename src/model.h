@@ -187,6 +187,7 @@ struct Settings {
   // tap = next card, double tap = focus timer, lying flat = screen off
   String orientation = "auto";
   bool accelMirror = false, accelTaps = true, flatSleep = true;
+  bool pitchInvert = false;                // games: flip "lean back" if it comes out backwards
 
 
   std::vector<String> leagues{"nfl", "nba", "mlb"};

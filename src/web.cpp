@@ -24,6 +24,7 @@ String webStatusLine;
 String webPinRequest;
 volatile bool webPinChanged = false;
 volatile bool webCheckUpdate = false;
+volatile int webGameCmd = -2;
 String webCardsJson = "{\"pinned\":\"\",\"cards\":[]}";
 
 static const char PAGE_HEAD[] PROGMEM = R"HTML(<!doctype html><html><head>
@@ -41,6 +42,9 @@ li.d span{text-decoration:line-through;color:#666}li span{flex:1}li button{margi
 <h2>Screen</h2>
 <div><select id=pin onchange="go('/pin?k='+encodeURIComponent(this.value))" style="background:#000;color:#eee;border:1px solid #333;border-radius:8px;padding:10px;font-size:15px;width:100%"></select></div>
 <div><button onclick="go('/pin?k=__current__')">&#128204; Keep this card on</button><button class='alt' onclick="go('/pin?k=')">&#8635; Rotate all</button></div>
+<h2>Games</h2>
+<div><button onclick="go('/game?g=0')">Dodger</button><button onclick="go('/game?g=1')">TiltyBird</button><button onclick="go('/game?g=2')">MarbleRun</button><button onclick="go('/game?g=3')">Catch</button><button onclick="go('/game?g=4')">Breakout</button><button onclick="go('/game?g=5')">Racer</button><button onclick="go('/game?g=6')">Balance</button><button class='alt' onclick="go('/game?g=99')">Menu</button><button class='alt' onclick="go('/game?g=-1')">Stop</button></div>
+<p style='color:#888;font-size:13px'>Tilt to play, tap the case for actions, double-tap to quit. Shake the clock to open the menu. No accelerometer: the games play themselves.</p>
 <h2>Focus timer</h2>
 <div><button onclick="go('/focus?m=25')">25 min</button><button onclick="go('/focus?m=50')">50 min</button><button class='alt' onclick="go('/focus?m=0')">Stop</button></div>
 <h2>Busy light</h2>
@@ -129,6 +133,11 @@ void webBegin() {
   });
   server.on("/favs", HTTP_GET, [] {
     webToggleFav = true;
+    server.send(200, "text/plain", "ok");
+  });
+  server.on("/game", HTTP_GET, [] {
+    int g = server.arg("g").toInt();
+    webGameCmd = (g == 99 || (g >= -1 && g <= 6)) ? g : -2;
     server.send(200, "text/plain", "ok");
   });
   server.on("/focus", HTTP_GET, [] {
