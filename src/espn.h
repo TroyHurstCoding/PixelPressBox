@@ -4,7 +4,9 @@
 #include <map>
 
 // Download today's scoreboard for a league. Returns false on network/parse failure.
-bool fetchScoreboard(const String &league, std::vector<Game> &out);
+// query: extra URL parameters, e.g. "week=12&seasontype=2" ("" = ESPN's current window)
+bool fetchScoreboard(const String &league, std::vector<Game> &out, const String &query = "");
+const char *espnSport(const String &league);  // "nfl" -> "football"
 
 struct StatLine {
   String line;   // "2-4 1HR 3RBI"

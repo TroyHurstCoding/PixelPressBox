@@ -7,6 +7,11 @@ struct Item {
   bool done = false;
 };
 static std::vector<Item> items;
+static std::vector<String> microsoftTasks;
+
+void todoSetMicrosoft(std::vector<String> tasks) {
+  microsoftTasks = std::move(tasks);
+}
 static const char *PATH = "/todo.json";
 
 void todoLoad() {
@@ -37,6 +42,7 @@ std::vector<String> todoOpen() {
   std::vector<String> out;
   for (auto &i : items)
     if (!i.done) out.push_back(i.text);
+  for (const auto &task : microsoftTasks) out.push_back("TASK: " + task);
   return out;
 }
 
@@ -47,6 +53,12 @@ String todoJson() {
     JsonObject o = d.add<JsonObject>();
     o["t"] = i.text;
     o["d"] = i.done;
+  }
+  for (const auto &task : microsoftTasks) {
+    JsonObject o = d.add<JsonObject>();
+    o["t"] = task;
+    o["d"] = false;
+    o["source"] = "microsoft";
   }
   String s;
   serializeJson(d, s);

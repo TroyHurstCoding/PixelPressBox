@@ -61,6 +61,7 @@ bool displayBegin() {
   if (!dma->begin()) return false;
   dma->setBrightness8(CFG.brightness);
   dma->setTextWrap(false);
+  if (CFG.panelFlip) dma->setRotation(2);  // panel installed the other way up
   dma->clearScreen();
   return true;
 }
@@ -69,26 +70,31 @@ void displaySetBrightness(uint8_t b) {
   if (dma) dma->setBrightness8(b);
 }
 
-static void begin() { dma->clearScreen(); dma->fillScreen(0); }
+static void begin() { dma->clearScreen(); }
 static void end() { dma->flipDMABuffer(); }
 
 // every string goes through foldAscii: the panel font has no curly quotes, dashes or accents
-static void text(const String &s, int x, int y, uint32_t color, int size = 1) {
+static void textFolded(const String &s, int x, int y, uint32_t color, int size) {
   dma->setTextSize(size);
   dma->setTextColor(c565(color));
   dma->setCursor(x, y);
-  dma->print(foldAscii(s));
+  dma->print(s);
+}
+
+static void text(const String &s, int x, int y, uint32_t color, int size = 1) {
+  textFolded(foldAscii(s), x, y, color, size);
 }
 
 static void textRight(const String &s, int xRight, int y, uint32_t color) {
-  String f = foldAscii(s);
-  text(f, xRight - (int)f.length() * 6 + 1, y, color);
+  String f = foldAscii(s).substring(0, std::max(0, (xRight + 2) / 6));
+  textFolded(f, xRight - (int)f.length() * 6 + 1, y, color, 1);
 }
 
 static void textCenter(const String &s, int y, uint32_t color, int size = 1) {
-  String f = foldAscii(s);
+  int width = dma->width();
+  String f = foldAscii(s).substring(0, (width + size) / (6 * size));
   int w = f.length() * 6 * size - size;
-  text(f, (W - w) / 2, y, color, size);
+  textFolded(f, (width - w) / 2, y, color, size);
 }
 
 static void rect(int x, int y, int w, int h, uint32_t color) { dma->fillRect(x, y, w, h, c565(color)); }
@@ -102,7 +108,7 @@ void gfxText(const String &s, int x, int y, uint32_t color, int size) { text(s, 
 static int curRotation = 0;
 void displaySetRotation(int r) {
   r &= 3;
-  if (dma && r != curRotation) dma->setRotation(r);
+  if (dma && r != curRotation) dma->setRotation(CFG.panelFlip ? (r + 2) & 3 : r);  // panelFlip: a half turn on top
   curRotation = r;
 }
 int displayRotation() { return curRotation; }
@@ -156,6 +162,12 @@ void drawMessage(const String &l1, const String &l2, uint32_t color) {
   begin();
   textCenter(l1.substring(0, 10), 6, color);
   if (l2.length()) textCenter(l2.substring(0, 10), 18, GREY);
+  end();
+}
+
+void drawTapMenu(int sel, const char *const *items, int n) {
+  begin();
+  for (int i = 0; i < n && i < 4; i++) text(String(i == sel ? ">" : " ") + items[i], 0, i * 8, i == sel ? YELLOW : GREY);
   end();
 }
 
@@ -532,7 +544,18 @@ void drawHoliday(const Card &c, int frame) {
   begin();
   if (h.icon == HI_FIREWORKS) fireworks(frame);
   if (c.title.length()) textCenter(c.title, 2, WHITE);
-  textCenter(c.text, c.title.length() ? 12 : 8, c.color);
+  String name = foldAscii(h.name);
+  name.toUpperCase();
+  const int y = c.title.length() ? 12 : 8;
+  const int overflow = textWidth(name) - W;
+  if (overflow <= 0) {
+    textCenter(name, y, c.color);
+  } else {
+    // Pause at both ends so a long name stays readable in the dedicated text row.
+    const int cycle = 24 + overflow;
+    const int offset = std::max(0, std::min(overflow, frame % cycle - 12));
+    textFolded(name, -offset, y, c.color, 1);
+  }
   if (h.icon != HI_FIREWORKS && h.icon != HI_NONE) holidayIcon(h.icon, 27, 22, c.color);
   end();
 }

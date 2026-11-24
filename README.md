@@ -63,9 +63,22 @@ Insert it into the board's TF slot. (Without a card it still runs on built-in de
 The screen shows **JOIN WIFI**. On your phone, join the WiFi network **PixelPressbox-Setup**, pick your
 home WiFi (2.4 GHz) and enter the password. It remembers it from then on.
 
+**More than one WiFi:** the clock remembers every network it has joined (up to 8) and, at power-up or when the
+signal drops, joins whichever one is in range, strongest first. Add another ahead of time on the phone page under
+**System > WiFi** (name + password), or just take the clock there: when no remembered network is in range it opens
+**PixelPressbox-Setup** again and the new one is added to the list. **Forget** removes one. The list is kept in the
+board's own memory, not on the SD card.
+
 ## 4. Settings from your phone
-Open **http://pixelpressbox.local** (same WiFi). You can edit every setting, press **Save & restart**,
-and tap buttons to **test each sound** on the speaker.
+Open **http://pixelpressbox.local** (same WiFi). The page has four tabs along the bottom:
+- **Remote:** pick or pin the screen, Next, favorites only, focus timer, busy light, games, test each sound.
+- **To-do:** add, tick off and clear to-dos.
+- **Settings:** the everyday options as dropdowns, switches and sliders (clock face, time zone, brightness, night
+  dimming, teams, which screens rotate, countdowns, sound, motion sensor...). Change what you like, then
+  **Save & restart**. Settings the page doesn't show are left exactly as they were.
+- **System:** WiFi networks, Outlook sign-in, firmware updates, restart, and **Edit the settings file** for the
+  rarely changed options in the table below (the raw config.json).
+To try the page on a computer without the clock: `python3 tools/preview_page.py`, then open http://localhost:8377.
 
 | Setting | What it does |
 |---|---|
@@ -78,6 +91,7 @@ and tap buttons to **test each sound** on the speaker.
 | `timezone` | POSIX TZ string; Pacific is `PST8PDT,M3.2.0,M11.1.0` |
 | `panel.driver` | `SHIFTREG` (Seengreat default). **Blank/garbled/dim?** try `FM6126A`, then `ICN2038S` |
 | `panel.swap_green_blue` | `true` for the Adafruit #5036 panel |
+| `panel.flip` | `true` if the picture is upside down when the clock stands the way you want it (the LED panel is installed the other way up) |
 
 **Pin a card:** on the phone page under **Screen**, pick any card ("Show only: Tetris clock", "LV @ KC",
 "Clock"...) or tap **Keep this card on** to freeze whatever's showing. **Rotate all** goes back to cycling.
@@ -105,17 +119,21 @@ The clock is the home screen; other cards come and go, and the clock returns aft
 | Sports | Scores and celebrations as before | `sports`: `all`, `favorites` or `off` |
 
 ### Outlook (work account)
-Microsoft requires an "app registration" for any device that reads your calendar. It takes about 5 minutes:
-1. Go to **https://entra.microsoft.com** → App registrations → New registration. Name it PixelPressbox,
-   pick "Accounts in any organizational directory", no redirect URI.
-2. In the new app: **Authentication** → turn on **Allow public client flows**.
-3. **API permissions** → Add → Microsoft Graph → Delegated → `Calendars.Read`, `Mail.ReadBasic`, `Presence.Read`.
-4. Copy the **Application (client) ID** into config.json as `outlook.client_id`. Save & restart.
-5. On the phone page press **Sign in to Outlook**. The panel and the page show a code; enter it at
-   **microsoft.com/devicelogin** and sign in with your work account.
+1. Open [Microsoft Entra](https://entra.microsoft.com/) with your work or school account. Under **App registrations → New registration**, name the app **PixelPressbox**. Choose **Accounts in any organizational directory** to use the clock's default tenant setting. Leave the redirect URI blank.
+2. In the app's **Overview**, copy the **Application (client) ID**. Under **Authentication → Advanced settings**, set **Allow public client flows** to **Yes** and save. The clock uses a device code, so setup needs no client secret. [Microsoft public client setup](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-app-registration)
+3. Under **API permissions → Add a permission → Microsoft Graph → Delegated permissions**, add `Calendars.Read`, `Mail.ReadBasic`, and `Presence.Read`. The firmware requests all three during sign-in. If your organization requires admin consent, ask IT to approve the app and device-code sign-in. [Microsoft Graph permissions](https://learn.microsoft.com/en-us/graph/permissions-reference)
+4. On the clock's local page, open **System → Edit the settings file**. In the existing `outlook` object, set `"client_id"` to the ID you copied. If IT registered the app as single-tenant, set `"tenant"` to the **Directory (tenant) ID** from Overview. Save and restart.
+5. Under **System**, choose **Sign in to Outlook**. Enter the clock's code at [Microsoft device sign-in](https://microsoft.com/devicelogin) and use the account whose primary calendar should appear on the clock. Verify with an upcoming timed event in that calendar.
 
-If sign-in says your organization needs **admin approval**, your IT department blocks self-approved apps;
-they'd have to approve it (or it won't work on that account). Nothing else breaks without it.
+### Sync Microsoft To Do
+
+Add **Microsoft Graph → Delegated permissions → Tasks.Read** to the same Entra app. On PixelPressbox, enable **Sync Microsoft To Do** under Settings and save and restart. If the clock was already signed in, sign out and sign back in under **System** to grant the new permission.
+
+Open tasks appear in the existing To-do list on the panel and the phone page. The clock refreshes them on the Outlook polling interval (three minutes by default) and displays up to 30 open tasks from the first eight lists returned by Microsoft. Complete or edit synced tasks in Microsoft To Do. The clock keeps its own editable tasks on the microSD card.
+
+### Use Apple Calendar with PixelPressbox
+
+On your iPhone, open **Settings → Apps → Calendar → Calendar Accounts → Add Account → Microsoft Exchange** and add the same account linked to PixelPressbox. In Apple Calendar, choose that account's primary calendar when creating an event. You can also choose it under **Settings → Apps → Calendar → Default Calendar**. For eligible existing events, edit the event and change its calendar. Events stored only in iCloud require a separate integration. [Apple Calendar account and default-calendar setup](https://support.apple.com/en-euro/guide/iphone/iphc37be2016/ios)
 
 ### Holidays
 Built in and calculated for any year: New Year's, MLK Day, Groundhog Day, Super Bowl Sunday, Valentine's,
@@ -196,14 +214,72 @@ Turn any of them off under `"cards"` in config.json (keys in brackets).
   (`"surf": {"name": "Venice", "lat": 33.985, "lon": -118.475}`), from Open-Meteo's free marine forecast.
 - **Hacker News** (`hacker_news`): the top 3 headlines.
 
+### Batch 4 cards
+Turn any of them off under `"cards"` in config.json, or with the chips under Settings > Screens in the rotation.
+- **Binary clock** (`binary_clock`): one column of dots per digit (8-4-2-1), hours red, minutes green, seconds blue.
+- **Sun-arc clock** (`sun_clock`): the sun (or a crescent moon at night) on its real path across the sky for your
+  weather location, sky colours from the sun's height, sunrise and sunset in the corners.
+- **City clock** (`city_clock`): a skyline whose windows light up through the evening, with traffic and stars.
+- **World clock** (`world_clock`): up to 4 cities with a day/night dot; a city already on tomorrow's date is tinted
+  blue, one still on yesterday's orange. `"world_clocks": [{"name": "LON", "utc": 0, "dst": "eu"}]`: `utc` is the
+  standard-time offset in hours, `dst` is `us`, `eu`, `au` or `""`.
+- **Sand clock** (`sand_clock`): the minutes pile up as sand (24 grains a minute); at the top of the hour the floor
+  opens and it drains. Tilt the clock and the sand slides.
+- **Win probability** (`win_probability`): ESPN's win-probability line for your favorite teams' games, live and for
+  a while after the final. While live it joins the takeover rotation with the scoreboard.
+- **Top performers** (`top_performers`): after your favorite's game, each team's best line ("J. ALLEN 304 YDS 1 TD").
+- **Next game** (`next_game`): your favorite team's next game (ESPN team schedule): opponent, day and time, a
+  countdown, TV, and the betting line and over/under once ESPN posts them. It replaces the plain pre-game card.
+- **Golf leaderboard** (`golf`): the top 10 of the current PGA Tour event while it's on and for a few days after
+  (`"golf": {"tour": "pga"}`; ESPN also has `lpga`, `eur`, `liv`).
+- **Fantasy points** (`fantasy_points`): see Fantasy football below.
+- **Game of Life** (`game_of_life`): Conway's Life on a wrap-around board; newborn cells bright, old ones violet. It
+  starts over when it settles. A tap drops in a glider.
+- **Sound visualizer** (`visualizer`): a 16-band spectrum from the board's own microphones. Only in the rotation
+  when the microphones answer at startup.
+- **Planes overhead** (`planes`): a radar with the planes within `"planes": {"radius_km": 40}` of your weather
+  location, and the nearest ones' callsign, altitude, speed, heading and distance. From the OpenSky Network
+  (anonymous, every 5 minutes to stay inside its daily limit).
+
+### Fantasy football (points, your league's scoring)
+Settings > **Fantasy football** on the phone page:
+- **Search** a player by name (the phone asks ESPN directly) and add him to your team or the opponent's; add a team
+  defence from the list.
+- Or **paste a whole roster**: one player per line, `[me]` and `[opp]` sections; OctoBoxVR's `roster.txt` works as
+  is. Each line is matched on ESPN and reported `ok`, `MISS` or `AMBIG`; add `, POS, TEAM` to a line that misses.
+- **Scoring rules** are prefilled with the OctoBoxVR league (half PPR, 5-point passing TDs, 0.04 per passing yard,
+  -2 per interception and lost fumble, kicker 3/1 with -2/-1 for misses, 2-point bonuses at 400 passing / 150 rushing /
+  150 receiving yards, the D/ST points-allowed ladder). Any bonus named `passNNN`, `rushNNN` or `recNNN` works.
+- **Week**: this week (ESPN's current week) or a chosen one.
+The card shows the matchup total, then each side's players: green = on the field right now (for a defence: when the
+other team has the ball), white = playing, grey = done, dark = not started, dim red = no game this week. Scores come
+from ESPN's box scores, the same way OctoBoxVR's `fantasy-poll.mjs` does it, and a finished game is downloaded once.
+Limits: field goals are a flat amount (no kick distances in the box score) and 2-point conversions aren't counted.
+The older "Stat lines to follow" list (`fantasy_players`) still shows box-score lines for any league.
+
+### Microphones
+The board's ES7210 microphones feed the sound visualizer and, if you turn it on, **clap control**: two claps in a
+row = next screen (`"mic": {"clap_control": true, "sensitivity": "high"}`). Claps are ignored while the clock is
+playing a sound.
+
 ### Accelerometer and portrait mode
 The ADXL345 (GY-291 board) plugs into the board's 4-pin **I2C expansion port** (the small SH1.0 socket) with a
 STEMMA QT / Qwiic to female-socket cable (Adafruit 4397): VCC to VCC, GND to GND, SDA to SDA, SCL to SCL. On the GY-291
 also join **CS to VCC** (I2C mode); leave SDO unconnected (address 0x53). The clock finds it at startup; without it
 everything works as before.
-- **Tap** the case: next card. **Double tap:** focus timer. On the cradle and the beer glass a single tap plays with
+- **Tap** the case: next card. **Double tap:** opens a small menu on the panel: **FOCUS** (start the timer), **GAMES**
+  (the games menu), **FAVS ONLY** (toggle), **CLOCK** (choose the face). Tap moves down the list, double tap chooses, 6 seconds of nothing
+  closes it. How hard a tap has to be is a dropdown in Settings > Motion sensor (`"motion": {"tap_force": ...}`:
+  `verylight`, `light` (default), `firm`). On the cradle and the beer glass a single tap plays with
   the screen instead and a double tap moves on.
-- **Lay it flat** (on its face or back) for 2 seconds: the screen turns off; pick it up and it comes back.
+- **Choose a clock face on the device:** stand it in landscape, double tap on an ordinary clock screen, single-tap to **CLOCK**, then double tap to open it. Single-tap through the faces and double tap or press the wheel to save. **P: DIGITS** and **P: ANALOG** control the portrait face. A writable microSD card makes the choice persist after restart.
+- **Turning it:** the picture stays as it is until the clock has been turned more than halfway (45°, plus a few
+  degrees so it can't flicker) toward the next way up.
+- **Calibrate** (phone page, System > Motion sensor): press one button with the clock standing upright and one with
+  it on its back. That measures how the sensor is mounted, whichever way that is. The same card shows the live
+  readings; the USB log prints them once a second too.
+- **Lay it flat** (on its face or back) for 2 seconds: the screen turns off; pick it up and it comes back. This only
+  happens after calibrating, so a sensor mounted some other way round can never blank a standing clock.
 - **Upside down:** everything flips to read upright.
 - **Portrait:** stand it on either end and it switches to the tall screens, with the tall clock in between:
   - **Beer glass** (`beer`): pours itself a pint, lets the head settle, then sips. Tilt it and the beer stays level;
@@ -213,7 +289,10 @@ everything works as before.
     the accelerometer it turns itself over when it runs out.
   - **Lava lamp** (`lava_lamp`): blobs heat at the bottom, rise, cool and sink.
   - **Water** works standing up too.
-- Settings: `"motion": {"orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true, "pitch_invert": false}`.
+- Settings: `"motion": {"mount": "panel", "orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true, "pitch_invert": false}`.
+  `mount` says where the little board sits: `"panel"` = flat on the back of the LED panel on one of its screws, pin
+  row along the lower edge, pins pointing at the back cover (the default); `"fin"` = the earlier position, hanging
+  chip-down under a fin on the back cover. Which way up it reads is worked out at power-up, standing in landscape.
   `orientation` can force `"landscape"` or `"portrait"` (portrait screens even without the accelerometer).
   If portrait shows upside down, set `"mirror": true` (it depends on which way the little board was mounted).
 
@@ -228,6 +307,12 @@ game over, tap to play again; otherwise it returns to the menu. Best scores are 
 - **Breakout:** tilt to move the paddle and clear the bricks.
 - **Racer:** steer down a winding road around the traffic.
 - **Balance:** keep a ball on a see-saw while wind gusts push it.
+- **Pong:** tilt your paddle (bottom) against the clock's (top). Three lives; score a point each time it misses.
+- **Simon:** watch the colours, then repeat them: tilt to choose a column, tap to press it.
+- **Lander:** lean back to fire the engine, tilt to drift, and touch down gently on the yellow pad. Each landing
+  scores 50 plus leftover fuel, and the next pad is smaller with stronger gravity.
+- **Reaction:** wait for green, then tap. Five rounds; the score is 1000 minus your average time in milliseconds
+  (timed to the frame, about 33 ms).
 "Lean back" is measured from how you're holding the clock when the game starts. If it comes out backwards, set
 `"motion": {"pitch_invert": true}`. Without the accelerometer the games play themselves as a demo (a minute each).
 Desktop check: `test/sim/games_sim.cpp` plays every game on its autopilot.
@@ -265,23 +350,25 @@ shell. 8 tiny crush ribs on the rim stop it rattling. **To open:** spread the to
 (or slip a thumbnail or guitar pick into the seam) and lift the back cover out; everything comes with it.
 Cut-away: `case/snap_fit.png`.
 
-**Front:** the panel sits **flush** with the shell's front edge (no lip, louver or diffuser). The bezel is a 2 mm
+**Front:** the panel sits **0.3 mm behind** the shell's front edge (`FLUSH`; no lip, louver or diffuser), so
+print tolerance can't leave the LEDs proud. The bezel is a 2 mm
 wall plus a 0.3 mm gap, so every LED, edges included, shows. A 0.5 mm bevel softens the outer front edge. The back
 cover landing on the shell's back edge sets the depth, and the columns' length (from `PANEL_D`, the panel's
-thickness) puts the panel flush: if it ends up proud or sunk, measure the panel, set `PANEL_D` and reprint the back
+thickness) sets that recess: if it ends up proud or sunk too far, measure the panel, set `PANEL_D` and reprint the back
 cover. **All four sides are plain**: no screws, no openings, for landscape or portrait.
 
 **Layout (as seen from the front):**
 - The board screws onto 4 standoffs on the back cover, 35 mm in from the right wall, speaker side facing the back.
   A HUB75 ribbon runs from the board to the panel.
 - **Power is hard-wired**: the power supply's own USB-C cable (iUniker XSG-0503500HUS, 5.25 V 4 A) plugs into the
-  board and snaps into a slot in the back cover's bottom edge, on the right side seen from the front. `CABLE_D` in
+  board and snaps into a slot in the back cover's bottom right corner (seen from the front), beside the stand. `CABLE_D` in
   `build_case.py` is an estimate (4.0 mm): **measure the cable and rerun before printing the back cover.**
 - The thumbwheel sits inside the case and isn't used; the accelerometer (tap / double-tap) takes over its jobs.
-- **Back cover:** speaker grille with a gasket ring and 2 mic-hole clusters. No vents: at desk-clock brightness the
-  panel and board run cool; keep the brightness moderate for screens that stay bright white for hours.
-- **Stand:** 12° lean-back cradle. The front lip is 2 mm tall so it never covers the LEDs; the back lip has a slot
-  for the power cable.
+- **Back cover:** speaker grille, plus a row of 4 vent slots beside it (level with the grille, under the
+  accelerometer). No mic holes: the firmware doesn't use the microphones. At desk-clock brightness the panel and
+  board run cool; keep the brightness moderate for screens that stay bright white for hours.
+- **Stand:** 12° lean-back cradle. The front lip is 2 mm tall so it never covers the LEDs; the power cable leaves the
+  back cover beside the cradle's end.
 - 32.1 mm of room behind the panel. The board's underside socket ends 11.5 mm from the panel.
 
 **Files** (`case/stl/`):
@@ -297,7 +384,7 @@ cover. **All four sides are plain**: no screws, no openings, for landscape or po
 
 **Hardware:** nothing needs tapping or inserts.
 - 4× M3×35 button head (back cover's columns → panel's threaded corner holes, 4.5 mm in). Heads sit in recesses.
-- 4× M2.5×8 (board → standoffs) and 2× M3×6 (accelerometer → the back cover's fin): these self-tap into
+- 4× M2.5×8 (board → standoffs): these self-tap into
   undersized printed holes. Drive each one in slowly the first time and don't overtighten.
 - 1 short HUB75 ribbon (comes with the panel).
 
@@ -306,15 +393,14 @@ cover. **All four sides are plain**: no screws, no openings, for landscape or po
 2. Plug the ribbon into the board and the panel's input socket; plug in the panel power cable.
 3. Set the back cover on the panel (columns on the panel's corner holes) and drive the 4 M3×35 screws.
 4. Plug the power cable into the board and snap it into the slot at the back cover's bottom edge.
-5. Screw the accelerometer under the fin near the back cover's top edge (components and pins facing down) and plug
-   its 4 jumper wires into the board.
+5. Put the accelerometer on the panel's top-middle screw, flat against the panel, pin row along the lower edge,
+   and plug its 4 jumper wires into the board (do this before step 3 if the wires are short).
 6. Slide the module into the shell from the back until the 4 catches click.
 
-**Accelerometer (ADXL345):** mounted on the back cover, so it comes out with the module. A fin rises from the back
-cover just inside its top rim (left half seen from the front); the board hangs under it on 2 bosses, parallel to the
-top wall, components and pins facing down, pin row next to the back cover, so the jumper plugs hang beside the back
-cover, nowhere near the panel. Sized from `case/GY-291_ADXL345_module.step`: 20.4 × 16.1 mm board, 3.6 mm holes
-15.5 mm apart. Cross-section: `case/accel_mount.png`.
+**Accelerometer (ADXL345):** screwed flat onto the back of the LED panel with the panel's own top-middle screw,
+pin row along the lower edge, pins pointing at the back cover (`"motion": {"mount": "panel"}`). The back cover
+carries nothing for it. Check that the pins and jumper plugs clear the Seengreat board behind them before closing
+the case; right-angle leads help.
 
 ## What's verified vs. not
 - ✅ Firmware **compiles** for the ESP32-S3-WROOM-1-N16R8 with Seengreat's pin map (Arduino core 3.3, 0 warnings).
@@ -333,7 +419,7 @@ cover, nowhere near the panel. Sized from `case/GY-291_ADXL345_module.step`: 20.
 ## Decisions so far
 - Power exits the **right side** (port window to be redone for the Seengreat board).
 - Speaker + mics are **on the board itself** → grilles next to the board (to be redone for the new layout).
-- **All black** prints; the panel sits flush with no louver or diffuser.
+- **All black** prints; the panel sits 0.3 mm behind the bezel with no louver or diffuser.
 - No physical button; the thumbwheel press starts/stops the focus timer, everything else is on the phone page.
 - Mostly a desk clock: the clock is the home screen, sports and other cards rotate in between.
 - No wall mount for now.

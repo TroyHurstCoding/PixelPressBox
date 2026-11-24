@@ -10,6 +10,9 @@
 #include "msgraph.h"
 #include "settings.h"
 #include "todo.h"
+#include "webpage_gz.h"  // src/webpage.h, gzipped at build time by tools/gzip_webpage.py
+#include "wifinet.h"
+#include "motion.h"
 
 static WebServer server(80);
 volatile bool webWantsRestart = false;
@@ -27,82 +30,35 @@ volatile bool webCheckUpdate = false;
 volatile int webGameCmd = -2;
 String webCardsJson = "{\"pinned\":\"\",\"cards\":[]}";
 
-static const char PAGE_HEAD[] PROGMEM = R"HTML(<!doctype html><html><head>
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>PixelPressbox</title>
-<style>body{font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:16px;max-width:720px}
-h1{font-size:22px;margin:0 0 4px}p{color:#aaa;margin:4px 0 14px}
-textarea{width:100%;height:55vh;background:#000;color:#9f9;font:13px ui-monospace,Menlo,monospace;border:1px solid #333;border-radius:8px;padding:10px;box-sizing:border-box}
-button{background:#2a6;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:15px;margin:8px 6px 0 0}
-button.alt{background:#333}.row{margin-top:14px}h2{font-size:17px;margin:22px 0 4px}
-#st{color:#9cf}input[type=text]{background:#000;color:#eee;border:1px solid #333;border-radius:8px;padding:10px;font-size:15px;width:65%}
-ul{list-style:none;padding:0}li{padding:7px 0;border-bottom:1px solid #222;display:flex;gap:10px;align-items:center}
-li.d span{text-decoration:line-through;color:#666}li span{flex:1}li button{margin:0;padding:4px 10px}</style></head><body>
-<h1>PixelPressbox</h1><p id='st'></p>
-<div><button onclick="go('/next')">&#9654; Next</button><button class='alt' onclick="go('/favs')">&#9733; Favorites only on/off</button></div>
-<h2>Screen</h2>
-<div><select id=pin onchange="go('/pin?k='+encodeURIComponent(this.value))" style="background:#000;color:#eee;border:1px solid #333;border-radius:8px;padding:10px;font-size:15px;width:100%"></select></div>
-<div><button onclick="go('/pin?k=__current__')">&#128204; Keep this card on</button><button class='alt' onclick="go('/pin?k=')">&#8635; Rotate all</button></div>
-<h2>Games</h2>
-<div><button onclick="go('/game?g=0')">Dodger</button><button onclick="go('/game?g=1')">TiltyBird</button><button onclick="go('/game?g=2')">MarbleRun</button><button onclick="go('/game?g=3')">Catch</button><button onclick="go('/game?g=4')">Breakout</button><button onclick="go('/game?g=5')">Racer</button><button onclick="go('/game?g=6')">Balance</button><button class='alt' onclick="go('/game?g=99')">Menu</button><button class='alt' onclick="go('/game?g=-1')">Stop</button></div>
-<p style='color:#888;font-size:13px'>Tilt to play, tap the case for actions, double-tap to quit. Shake the clock to open the menu. No accelerometer: the games play themselves.</p>
-<h2>Focus timer</h2>
-<div><button onclick="go('/focus?m=25')">25 min</button><button onclick="go('/focus?m=50')">50 min</button><button class='alt' onclick="go('/focus?m=0')">Stop</button></div>
-<h2>Busy light</h2>
-<div><button class='alt' onclick="go('/busy?m=0')">Auto (calendar)</button><button style='background:#c33' onclick="go('/busy?m=1')">Busy</button><button class='alt' onclick="go('/busy?m=2')">Free</button></div>
-<h2>To-do</h2>
-<form onsubmit="add();return false"><input type=text id=nt placeholder='Add a to-do'><button>Add</button></form>
-<ul id=tl></ul><button class='alt' onclick="go('/todo/clear').then(load)">Clear done</button>
-<h2>Outlook</h2><p id=ms></p>
-<div><button onclick="go('/ms/login')">Sign in to Outlook</button><button class='alt' onclick="go('/ms/logout')">Sign out</button></div>
-<script>
-function go(u){return fetch(u).then(()=>setTimeout(status,600))}
-function esc(t){return t.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function load(){fetch('/todo').then(r=>r.json()).then(l=>{document.getElementById('tl').innerHTML=l.map((x,i)=>
-"<li class='"+(x.d?'d':'')+"'><input type=checkbox "+(x.d?'checked':'')+" onchange=\"go('/todo/done?i="+i+"').then(load)\"><span>"+esc(x.t)+
-"</span><button class=alt onclick=\"go('/todo/del?i="+i+"').then(load)\">&times;</button></li>").join('')})}
-function add(){let e=document.getElementById('nt');if(!e.value)return;fetch('/todo/add?t='+encodeURIComponent(e.value)).then(()=>{e.value='';load()})}
-function status(){fetch('/status').then(r=>r.json()).then(s=>{document.getElementById('st').textContent=s.line;document.getElementById('ms').textContent=s.ms;if(s.fw)document.getElementById('fw').textContent='Firmware '+s.fw});
-fetch('/cards').then(r=>r.json()).then(c=>{let p=document.getElementById('pin');if(document.activeElement===p)return;
-p.innerHTML="<option value=''>Rotate through all cards</option>"+c.cards.map(x=>"<option value='"+esc(x.k)+"'"+(x.k==c.pinned?" selected":"")+">Show only: "+esc(x.l)+"</option>").join('')})}
-function checkUpd(){let b=document.getElementById('cu'),f=document.getElementById('fw');b.disabled=true;b.textContent='Checking...';
-f.textContent='Asking GitHub for a newer version...';let n=0;
-fetch('/checkupdate').catch(()=>{});let t=setInterval(()=>{n++;fetch('/status').then(r=>r.json()).then(s=>{
-let m=s.fw;if(s.ota)m+=' ('+Math.round(s.ota/1024)+' KB)';f.textContent='Firmware '+m;
-if(/Up to date|failed|off/.test(s.fw)){clearInterval(t);b.disabled=false;b.textContent='Check for update'}
-}).catch(()=>{if(n>3)f.textContent='Restarting with the new firmware... reload in a moment'});if(n>150){clearInterval(t);b.disabled=false;b.textContent='Check for update'}},2000)}
-load();status();setInterval(status,5000);
-</script>
-<h2>Settings</h2>
-<p>Edit config.json, then Save &amp; restart.</p>)HTML";
-
 static void handleRoot() {
-  String html = FPSTR(PAGE_HEAD);
-  String cfg = readConfigText();
-  cfg.replace("&", "&amp;");
-  cfg.replace("<", "&lt;");
-  html += "<form method='POST' action='/save'><textarea name='cfg' spellcheck='false'>" + cfg +
-          "</textarea><button>Save &amp; restart</button></form>"
-          "<div class='row'><b>Test sounds</b><br>";
+  server.sendHeader("Content-Encoding", "gzip");
+  server.send_P(200, "text/html", (const char *)WEB_PAGE_GZ, sizeof(WEB_PAGE_GZ));
+}
+
+// names of the sounds on the card, without extensions: ["td","fg","LV_td",...]
+static String soundsJson() {
+  JsonDocument d;
+  JsonArray a = d.to<JsonArray>();
   File dir = SD.open("/sounds");
   if (dir) {
     for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
       String n = f.name();
+      int slash = n.lastIndexOf('/');
+      if (slash >= 0) n = n.substring(slash + 1);
       int dot = n.lastIndexOf('.');
-      String base = dot > 0 ? n.substring(0, dot) : n;
-      html += "<button class='alt' onclick=\"fetch('/test?s=" + base + "')\">" + base + "</button>";
+      if (!f.isDirectory() && !n.startsWith(".") && dot > 0) a.add(n.substring(0, dot));
+      f.close();
     }
   }
-  html += "</div><div class='row'><button class='alt' onclick=\"fetch('/restart')\">Restart</button>"
-          "<button class='alt' id=cu onclick='checkUpd()'>Check for update</button>"
-          "<button class='alt' onclick=\"location.href='/update'\">Upload firmware</button></div>"
-          "<p style='color:#777' id=fw>Firmware " FW_VERSION "</p></body></html>";
-  server.send(200, "text/html", html);
+  String out;
+  serializeJson(d, out);
+  return out;
 }
 
 static void handleSave() {
   if (!server.hasArg("cfg")) return server.send(400, "text/plain", "missing cfg");
   if (!writeConfigText(server.arg("cfg"))) return server.send(400, "text/plain", "Not saved: that isn't valid JSON.");
-  server.send(200, "text/html", "<meta http-equiv='refresh' content='8;url=/'>Saved. Restarting...");
+  server.send(200, "text/plain", "Saved. Restarting...");
   webWantsRestart = true;
 }
 
@@ -123,6 +79,40 @@ void webBegin() {
   });
   server.on("/", HTTP_GET, handleRoot);
   server.on("/save", HTTP_POST, handleSave);
+  server.on("/config", HTTP_GET, [] { server.send(200, "application/json", readConfigText()); });
+  server.on("/sounds", HTTP_GET, [] { server.send(200, "application/json", soundsJson()); });
+  // remembered WiFi networks (names only; passwords never leave the clock)
+  // motion sensor: live readings for the phone page, and the two-step mounting calibration
+  server.on("/motion", HTTP_GET, [] {
+    const Motion &m = motion();
+    JsonDocument d;
+    d["present"] = m.present;
+    d["cal"] = m.calibrated;
+    d["mount"] = CFG.accelMount;
+    d["orient"] = m.orient;
+    d["flat"] = m.flat;
+    float r[3];
+    motionRaw(r);
+    JsonArray raw = d["raw"].to<JsonArray>(), g = d["g"].to<JsonArray>();
+    for (float v : r) raw.add(roundf(v * 100) / 100);
+    for (float v : {m.gx, m.gy, m.gz}) g.add(roundf(v * 100) / 100);
+    String out;
+    serializeJson(d, out);
+    server.send(200, "application/json", out);
+  });
+  server.on("/motion/cal", HTTP_GET, [] {
+    server.send(200, "text/plain", motionCalibrate(constrain(server.arg("s").toInt(), 0, 2)));
+    webDeskChanged = true;  // redraw with the new orientation
+  });
+  server.on("/wifi", HTTP_GET, [] { server.send(200, "application/json", wifiListJson()); });
+  server.on("/wifi/add", HTTP_POST, [] {
+    bool ok = wifiRemember(server.arg("s"), server.arg("p"));
+    server.send(ok ? 200 : 400, "text/plain", ok ? "ok" : "bad network name or password");
+  });
+  server.on("/wifi/del", HTTP_GET, [] {
+    wifiForget(server.arg("s"));
+    server.send(200, "text/plain", "ok");
+  });
   server.on("/test", HTTP_GET, [] {
     webTestSound = server.arg("s");
     server.send(200, "text/plain", "ok");
@@ -154,6 +144,7 @@ void webBegin() {
   });
   server.on("/ms/logout", HTTP_GET, [] {
     msSignOut();
+    todoSetMicrosoft({});
     server.send(200, "text/plain", "ok");
   });
   server.on("/status", HTTP_GET, [] {

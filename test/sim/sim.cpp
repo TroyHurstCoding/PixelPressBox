@@ -6,6 +6,12 @@
 #include "../../src/render.h"
 #include "../../src/holidays.h"
 #include "../../src/render2.h"
+#include "../../src/render3.h"
+#include "../../src/feeds3.h"
+#include "../../src/fantasy.h"
+#include <fstream>
+#include <sstream>
+#include "../../src/net.h"
 #include "ESP32-HUB75-MatrixPanel-I2S-DMA.h"
 
 Settings CFG;
@@ -104,6 +110,8 @@ int main() {
   };
   drawHoliday(hcard("2026-10-31T19:00:00"), 0); dump("17_holiday_halloween");
   drawHoliday(hcard("2026-12-25T19:00:00"), 0); dump("18_holiday_christmas");
+  drawHoliday(hcard("2026-11-26T19:00:00"), 0); dump("18_thanksgiving_start");
+  drawHoliday(hcard("2026-11-26T19:00:00"), 28); dump("18_thanksgiving_end");
   drawHoliday(hcard("2026-07-04T19:00:00"), 18); dump("19_holiday_july4_fireworks");
   for (auto &c : buildDeskCards({}, {}, NowPlaying(), now))
     if (c.key.startsWith("cdh:")) { drawCountdown(c); dump("20_next_holiday"); }
@@ -190,6 +198,90 @@ int main() {
   SurfReport sr; sr.ok = true; sr.waveFt = 3.9f; sr.periodS = 11; sr.dirDeg = 254; sr.waterF = 64;
   for (int f = 0; f < 5; f++) drawSurf(sr, "VENICE", f);
   dump("58_surf");
+  // ---- batch 4
+  auto fixture = [](const char *name, JsonDocument &d) {
+    std::ifstream f(std::string("../native/fixtures/") + name);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    deserializeJson(d, ss.str(), DeserializationOption::NestingLimit(JSON_NESTING));
+  };
+  time_t pm = parseIsoUtc("2026-11-14T05:42:37");  // Fri 9:42:37 PM in LA
+  drawBinaryClock(pm); dump("90_binary_clock");
+  drawSunArcClock(parseIsoUtc("2026-11-13T22:10:00"), 34.05f, -118.24f); dump("91_sun_arc_afternoon");
+  drawSunArcClock(pm, 34.05f, -118.24f); dump("92_sun_arc_night");
+  for (int f = 0; f < 90; f++) drawCityClock(parseIsoUtc("2026-11-14T02:15:00"), f);
+  dump("93_city_evening");
+  drawCityClock(parseIsoUtc("2026-11-13T20:00:00"), 5); dump("94_city_noon");
+  drawWorldClock(pm); dump("95_world_clock");
+  drawSandClock(pm, 0, 1, true);
+  for (int f = 0; f < 120; f++) drawSandClock(pm + f / 25, 0, 1, false);
+  dump("96_sand_clock");
+  for (int f = 0; f < 400; f++) drawSandClock(pm + 5, 0.7f, 0.7f, false);
+  dump("97_sand_clock_tilted");
+  {
+    JsonDocument d;
+    fixture("nfl_summary_mia_buf_2026w11.json", d);
+    Game g;
+    g.league = "nfl"; g.id = "401873070"; g.state = 'f'; g.detail = "Final";
+    g.away.abbr = "MIA"; g.away.color = 0x008E97; g.away.alt = 0xFC4C02; g.away.score = 9;
+    g.home.abbr = "BUF"; g.home.color = 0x00338D; g.home.alt = 0xD50A0A; g.home.score = 26;
+    WinProb w;
+    parseWinProb(d, g, w);
+    drawWinProb(w, pm, false); dump("98_win_probability");
+    std::vector<Highlight> h;
+    parseHighlights(d, g, h);
+    drawHighlight(h[0], "W 26-9"); dump("99_top_performer");
+  }
+  {
+    JsonDocument d;
+    fixture("golf_scoreboard_rsm_2026.json", d);
+    GolfBoard gb;
+    parseGolf(d, gb);
+    drawGolf(gb, 0); dump("9A_golf_leaders");
+    drawGolf(gb, 1); dump("9B_golf_page2");
+  }
+  NextGame ng;
+  ng.ok = true; ng.league = "nfl"; ng.us = "LV"; ng.them = "KC"; ng.home = false; ng.tv = "CBS";
+  ng.line = "KC -7.5"; ng.overUnder = "44.5"; ng.start = pm + 2 * 86400 + 3 * 3600;
+  ng.usColor = 0xA5ACAF; ng.themColor = 0xE31837;
+  drawNextGame(ng, pm, false); dump("9C_next_game");
+  drawNextGame(ng, pm, true); dump("9D_next_game_line");
+  {
+    std::string fx;
+    { std::ifstream f("../native/fixtures/nfl_summary_mia_buf_2026w11.json"); std::stringstream ss; ss << f.rdbuf(); fx = ss.str(); }
+    CFG.fptsMe = "TROY"; CFG.fptsOpp = "RIVAL";
+    CFG.fptsPlayers = {{"3918298", "Josh Allen", "QB", "BUF", 0}, {"4373678", "Khalil Shakir", "WR", "BUF", 0},
+                       {"", "BUF D/ST", "DST", "BUF", 0}, {"1", "Bo Nix", "QB", "DEN", 0}, {"2", "Rashee Rice", "WR", "KC", 0},
+                       {"", "MIA D/ST", "DST", "MIA", 1}, {"3051909", "Daniel Carlson", "PK", "MIA", 1},
+                       {"4433971", "Kyle McCord", "QB", "MIA", 1}};
+    Game g;
+    g.league = "nfl"; g.id = "401873070"; g.state = 'i'; g.poss = "2";
+    g.away.abbr = "MIA"; g.away.id = "15"; g.away.score = 9;
+    g.home.abbr = "BUF"; g.home.id = "2"; g.home.score = 26;
+    Game g2 = g; g2.id = "2"; g2.state = 'p'; g2.away.abbr = "DEN"; g2.home.abbr = "KC";
+    FantasyCache fc;
+    JsonDocument filter;
+    fantasySummaryFilter(filter);
+    FptsBoard b = fantasyBuild({g, g2}, [&](const String &, JsonDocument &d) {
+      return !deserializeJson(d, fx, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(JSON_NESTING));
+    }, fc);
+    drawFantasyTotals(b, 0); dump("9E_fantasy_totals");
+    drawFantasyPage(b, 0, 0, 1); dump("9F_fantasy_mine");
+    drawFantasyPage(b, 1, 0, 1); dump("9G_fantasy_theirs");
+  }
+  uint8_t bands[16];
+  for (int i = 0; i < 16; i++) bands[i] = (uint8_t)(200 * expf(-((i - 4) * (i - 4)) / 18.0f) + 30 + (i * 37 % 50));
+  for (int f = 0; f < 3; f++) drawVisualizer(bands, 16, true, f);
+  dump("9H_visualizer");
+  for (int f = 0; f < 240; f++) drawLife(f, f == 0, f == 120);
+  dump("9I_game_of_life");
+  {
+    JsonDocument d;
+    fixture("opensky_la_2026-11-23.json", d);
+    std::vector<Flight> fl;
+    parseFlights(d, 34.05f, -118.24f, 40, fl);
+    drawFlights(fl, 0, 40, 30); dump("9J_planes_overhead");
+  }
   displaySetRotation(1);
   for (int f = 0; f < 200; f++) drawBeer(f, 0, 1, false, false, f == 0);
   dumpTall("60_beer_pour");
@@ -200,6 +292,9 @@ int main() {
   dumpTall("63_hourglass");
   for (int f = 0; f < 150; f++) drawLava(f, f == 0);
   dumpTall("64_lava_lamp");
+  CFG.portraitClockStyle = "analog";
+  drawPortraitClock(parseIsoUtc("2026-11-13T00:47:00")); dumpTall("65_analog_clock");
+  drawPortraitFocus(21 * 60 + 45, 25 * 60, false); dumpTall("66_portrait_focus");
   displaySetRotation(0);
   puts("rendered");
 }

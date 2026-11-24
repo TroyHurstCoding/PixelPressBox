@@ -11,7 +11,10 @@ enum CardKind { CARD_GAME, CARD_FANTASY, CARD_YAHOO, CARD_CLOCK, CARD_MEETING, C
                 CARD_AQUARIUM, CARD_PENDULUM, CARD_CRADLE, CARD_WATER,
                 CARD_BEER, CARD_PCLOCK, CARD_HOURGLASS, CARD_LAVA,        // portrait
                 CARD_TRIVIA, CARD_FACT, CARD_BILLBOARD, CARD_FLYW, CARD_ISS, CARD_PLANETS, CARD_NATDAY,
-                CARD_SURF, CARD_HN };
+                CARD_SURF, CARD_HN,
+                // batch 4
+                CARD_BINARY, CARD_SUNARC, CARD_CITY, CARD_WORLD, CARD_SAND, CARD_WINPROB, CARD_GOLF, CARD_NEXTGAME,
+                CARD_HIGHLIGHT, CARD_FPTS, CARD_VISUALIZER, CARD_LIFE, CARD_FLIGHTS };
 // true for the screens drawn 32 wide x 64 tall (the clock standing on its end)
 inline bool isPortraitCard(int k) { return k == CARD_BEER || k == CARD_PCLOCK || k == CARD_HOURGLASS || k == CARD_LAVA; }
 // screens that look right either way up (they follow gravity)

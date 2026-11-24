@@ -12,15 +12,16 @@ Parts (print orientation):
   stand.stl     black PLA   as exported
   fit_test.stl              the shell's first 10 mm: push the panel in to check the fit
 
-The panel sits FLUSH with the shell's front edge: no lip, no louver, no diffuser. The shell is an open frame
+The panel sits FLUSH mm (0.3) behind the shell's front edge: no lip, no louver, no diffuser. The shell is an open frame
 2 mm wide around the panel (0.3 mm gap). The lid's 4 columns are the panel's stop: the M3 screws pull the
 panel back against them, so column length (from PANEL_D) decides flushness. Measure the panel's thickness.
 Hardware: 4x M3x35 button head (back cover columns -> panel), 4x M2.5x8 (board -> standoffs),
-          2x M3x6 (accelerometer -> back cover fin). The back cover snaps into the shell: no screws.
+          The accelerometer rides on one of the LED panel's own screws. The back cover snaps into the shell: no screws.
 
 Layout (seen from the FRONT): board in the right half, speaker side facing the back cover.
 Walls: no openings. The power supply's cable plugs into the board and snaps into a slot in the back cover's bottom edge.
-Back cover: speaker grille + speaker gasket ring, two mic holes, power-cable slot. No vents.
+Back cover: speaker grille, a row of 4 vent slots beside the grille (level with its
+holes). Enough for clock use. The walls have no openings.
 Board <-> panel: the HUB75 ribbon cable (board header is right-angle, cable heads toward the middle).
 
 Coordinates (right-handed): Y up, Z = depth (front face at 0, back at OUT_D). Facing the display from the
@@ -46,7 +47,8 @@ PITCH, COLS, ROWS = 2.5, 64, 32
 CLR = 0.3                 # gap between the panel's edge and the shell, per side
 WALL = 2.0                # = the visible bezel around the panel (5 lines of a 0.4 mm nozzle)
 FRONT_CHAMFER = 0.5       # small bevel on the outer front edge; hides first-layer squish ("elephant foot")
-FLUSH = 0.0               # how far the panel's face sits behind the front edge (0 = flush; 0.3 protects LEDs)
+FLUSH = 0.3               # how far the panel's face sits behind the front edge (0 = flush). 0.3 keeps the LEDs
+                          # behind the bezel even when the print comes out +/-0.2 mm
 LID_T = 2.4
 CORNER_R = 3.0            # outer corner radius (keeps >= 1.5 mm of wall at the corners)
 RIM_T, RIM_D = 2.0, 6.0
@@ -74,7 +76,9 @@ BOARD_Y0 = -28.8          # board's bottom edge (front view); centered between t
 # Hard-wired power: the power supply's own USB-C cable (iUniker XSG-0503500HUS, 5.25 V 4 A) plugs straight into
 # the board and leaves through a snap-in slot in the back cover's bottom edge. MEASURE THE CABLE and set CABLE_D.
 CABLE_D = 4.0             # cable diameter (EST, typical for a 4 A USB-C lead)
-CABLE_X = -52.0           # front-view x of the exit: right side, clear of the panel screw column and the board
+CABLE_X = -73.0           # front-view x of the exit: in the bottom right corner, between the panel screw column
+                          # and the side wall. The plug points at the right wall, so the cable only has to turn
+                          # down to reach it (at -52 it had to double back under the plug)
 CABLE_SNAP = 0.6          # slot entry this much narrower than the cable, so it clicks in and stays
 
 # derived
@@ -126,26 +130,12 @@ WHEEL_D = STANDOFF - (WHEEL["z_center"] - PCB["t"])
 HOLES = [(bx(x), by(y)) for x, y in PCB["holes"]]
 BOARD_RECT = (min(bx(0), bx(PCB["w"])), by(0), max(bx(0), bx(PCB["w"])), by(PCB["h"]))
 SPK = part_rect("speaker")
-MICS = [part_rect("mic1"), part_rect("mic2")]
 # Panel screw columns: the panel's 4 corner mounting holes (from the panel's STEP model,
 # 64x32x2.5mm-rgb-matrix: holes at x 16.96/17.08 and 143.23/143.24, y 6.76 and 73.02/73.13 on 160x80).
 # Center-to-center 126.2 x 66.3 mm. Clearance holes (3.4 mm) absorb the ~0.2 mm spread.
 PX, PY = 126.2 / 2, 66.3 / 2
-# ADXL345 accelerometer (GY-291 style board, from GY-291_ADXL345_module.step): 20.4 x 16.1 x 1.6 mm PCB,
-# two 3.6 mm holes 15.5 mm apart, 2.3 mm in from one long edge; 8-pin header along the other long edge
-# (pins stick out 8.5 mm on the component side, 1.4 mm on the other). It mounts on the BACK COVER, so the shell
-# stays an empty sleeve: a fin rises from the back cover just inside its top rim, and the board hangs under the fin
-# (parallel to the top wall), components and pins facing down, pin edge next to the back cover. The jumper plugs
-# hang down beside the back cover, far from the panel.
-ACC_X = 40.0               # left half seen from the front, clear of the Seengreat board
-ACC_Z = 37.0               # board center depth (front face at 0): close to the back cover, short fin
-ACC_HOLE_DX, ACC_HOLE_OFF = 15.5, 5.75   # hole spacing; hole row 5.75 mm from the board's center line
-ACC_FIN_T, ACC_FIN_W = 2.5, 26.0         # fin thickness and width
-ACC_BOSS_L, ACC_BOSS_R = 2.0, 3.0        # bosses under the fin: hold the board 2 mm off it (1.4 mm pin stubs)
-ACC_PILOT_R = 1.3                         # 2.6 mm pilot through boss + fin (4.5 mm): M3x6 self-taps 4.4 mm
-ACC_FIN_Y = CAV_H / 2 - 0.2 - RIM_T - 0.3   # fin's top face, just inside the rim
-ACC_PCB_Y = ACC_FIN_Y - ACC_FIN_T - ACC_BOSS_L   # board's top face
-ACC_HOLES = [(ACC_X - ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF), (ACC_X + ACC_HOLE_DX / 2, ACC_Z - ACC_HOLE_OFF)]
+# The ADXL345 accelerometer is screwed flat onto the back of the LED panel (one of the panel's own screws), so the
+# back cover carries nothing for it.
 POST_R = 3.3              # column radius (1.6 mm wall around an M3 clearance hole)
 POST_HOLE_R = 1.7         # M3 clearance
 PANEL_SCREW = 35          # M3x35 button head, from the back of the back cover
@@ -157,7 +147,12 @@ CABLE_Y = -CAV_H / 2 + 2.3 + CABLE_D / 2   # cable center: just inside the lid's
 # are one module that drops into the shell from the back; the column length sets the panel flush at the front.
 POST_LEN = OUT_D - PANEL_BACK_Z
 PANEL_BITE = PANEL_SCREW - (LID_T + POST_LEN - CBORE_D)
-VENT_H, VENT_Y = 12.0, OUT_H / 2 - 23     # top vents end below the upper screw columns
+# vents: a row of slots beside the speaker grille, level with its holes, in the left half (seen from the front)
+VENT_H = 12.0
+VENT_Y = (SPK[1] + SPK[3]) / 2 - 0.5      # the grille holes' center height
+VENT_N, VENT_PITCH = 4, 9.0
+VENT_X = 40.0
+BOARD_VENTS_X = [VENT_X + (i - (VENT_N - 1) / 2) * VENT_PITCH for i in range(VENT_N)]
 
 
 def box(w, h, d, x=0.0, y=0.0, z=0.0):
@@ -255,31 +250,17 @@ def lid():
             xf = sx * rim_w / 2
             parts.append(rect_box(min(xf, xf + sx * RIB_H), yy - 0.5, max(xf, xf + sx * RIB_H), yy + 0.5,
                                   rib_z0, rib_z1))
-    # accelerometer fin: from the plate to just in front of the board's front edge, bosses on its underside
-    fin_z1 = LID_T + (OUT_D - (ACC_HOLES[0][1] - ACC_BOSS_R - 0.5))
-    parts.append(rect_box(fx(ACC_X) - ACC_FIN_W / 2, ACC_FIN_Y - ACC_FIN_T, fx(ACC_X) + ACC_FIN_W / 2, ACC_FIN_Y,
-                          LID_T - 0.1, fin_z1))
-    for hx, hz in ACC_HOLES:
-        zl = LID_T + (OUT_D - hz)
-        parts.append(y_cyl(ACC_BOSS_R, ACC_BOSS_L + 0.2, fx(hx), zl).translate(
-            (0, ACC_FIN_Y - ACC_FIN_T - ACC_BOSS_L / 2 + 0.1, 0)))
     for hx, hy in HOLES:                    # board standoffs (M2.5)
         parts.append(cyl(2.4, STANDOFF, fx(hx), hy, LID_T))
     for x, y in POSTS:                      # panel columns: the panel's back rests on their ends
         parts.append(cyl(POST_R, POST_LEN, fx(x), y, LID_T))
         parts.append(cyl(POST_BASE_R, POST_BASE_H, fx(x), y, LID_T))
-    # speaker gasket ring: channels sound to the grille, stops 1 mm short of the speaker (no buzz)
+    # speaker grille area (no ring around it: the inside of the back cover is flat here)
     sx0, sy0, sx1, sy1 = SPK
     cx, cy = (sx0 + sx1) / 2, (sy0 + sy1) / 2
-    ring_h = STANDOFF - PARTS["speaker"]["height"] - 1.0
     gw, gh = 33.0, 25.0
-    parts.append(box(gw + 2.4, gh + 2.4, ring_h, x=fx(cx), y=cy, z=LID_T) - box(gw, gh, ring_h + 2, x=fx(cx), y=cy, z=LID_T - 1))
     l = union(parts)
     cuts = []
-    for hx, hz in ACC_HOLES:                # accelerometer screw pilots through boss + fin
-        zl = LID_T + (OUT_D - hz)
-        cuts.append(y_cyl(ACC_PILOT_R, ACC_BOSS_L + ACC_FIN_T + 1, fx(hx), zl).translate(
-            (0, ACC_FIN_Y - (ACC_BOSS_L + ACC_FIN_T) / 2, 0)))
     cuts += [cyl(1.05, STANDOFF + 2, fx(hx), hy, LID_T - 0.6) for hx, hy in HOLES]  # 2.1 mm pilot for M2.5
     cuts += [cyl(POST_HOLE_R, LID_T + POST_LEN + 2, fx(x), y, -1) for x, y in POSTS]   # M3 through the column
     cuts += [cyl(CBORE_R, CBORE_D + 1, fx(x), y, -1) for x, y in POSTS]                # head recess
@@ -291,7 +272,7 @@ def lid():
     neck = CABLE_D - CABLE_SNAP
     cuts.append(rect_box(cut_x - neck / 2, -OUT_H / 2 - 1, cut_x + neck / 2, CABLE_Y, -1, LID_T + 1))
     cuts.append(box(CABLE_D + 1.0, RIM_T * 3, RIM_D + 2, x=cut_x, y=-rim_h / 2 + RIM_T / 2, z=LID_T - 0.5))
-    # speaker grille (inside the gasket ring)
+    # speaker grille
     x = -gw / 2 + 3
     while x <= gw / 2 - 3:
         y = -gh / 2 + 3
@@ -299,18 +280,17 @@ def lid():
             cuts.append(cyl(1.4, LID_T + 2, fx(cx + x), cy + y, -1))
             y += 4.5
         x += 4.5
-    # mic holes: a small cluster over each microphone
-    for mx0, my0, mx1, my1 in MICS:
-        mx, my = (mx0 + mx1) / 2, (my0 + my1) / 2
-        for ox, oy in ((0, 0), (2.2, 0), (-2.2, 0)):
-            cuts.append(cyl(0.8, LID_T + 2, fx(mx + ox), my + oy, -1))
+    # no mic holes: the firmware doesn't use the microphones (sound still reaches them through the grille)
+    for vx in BOARD_VENTS_X:                # vent slots beside the grille
+        cuts.append(box(3.0, VENT_H, LID_T + 2, x=fx(vx), y=VENT_Y, z=-1))
     return l - union(cuts)
 
 
 def stand():
     """Desk cradle, 12 deg lean-back. Modeled upright, then tilted: the case's top leans toward -y, so the
     viewer stands at +y. Front lip is only 2 mm tall so it never covers the flush panel's LEDs (the bezel is 2.3);
-    the back lip carries the lean and has the slot for the power cable."""
+    the back lip carries the lean. The power cable leaves the back cover beside the cradle's end; the back lip
+    only gets a slot if CABLE_X is moved to within the cradle's width."""
     wall, floor, height, width = 3.0, 3.0, 14.0, 120.0
     depth_in = OUT_D + LID_T + 0.6
     outer = box(width, depth_in + 2 * wall, height)
@@ -383,7 +363,7 @@ def check():
     for x, y in POSTS:
         if abs(x - CABLE_X) < POST_BASE_R + CABLE_D / 2 + 1 and abs(y - CABLE_Y) < POST_BASE_R + CABLE_D / 2 + 1:
             errors.append("power cable exit hits a panel screw column")
-    # 8 snap catches: clear of the cable gap, the accelerometer and the ribs
+    # 8 snap catches: clear of the cable gap and the ribs
     if abs(abs(CABLE_X) - SNAP_X) < SNAP_W / 2 + CABLE_D:
         errors.append("power cable gap runs into a snap catch")
     if abs(60.0 - SNAP_X) < SNAP_W / 2 + 2:
@@ -393,19 +373,18 @@ def check():
     for x, y in POSTS:
         if bx0 - POST_BASE_R < x < bx1 + POST_BASE_R and by0 - POST_BASE_R < y < by1 + POST_BASE_R:
             errors.append("screw column foot at (%.0f,%.0f) reaches under the board" % (x, y))
-    # 7 accelerometer on the back cover: board + bosses clear of the rim, panel, board, columns and vents
-    if ACC_Z + 8.05 > OUT_D - 0.5:
-        errors.append("accelerometer board touches the back cover")
-    if ACC_HOLES[0][1] - ACC_BOSS_R - 0.5 < PANEL_BACK_Z + 2:
-        errors.append("accelerometer fin reaches the panel")
-    if ACC_X - 10.2 < bx1 + 3 and ACC_X + 10.2 > bx0 - 3:
-        errors.append("accelerometer hangs over the Seengreat board")
+    # 7 vents clear of the board's standoffs, and the cable exit clear of the rim's corner
+    for vx in BOARD_VENTS_X:
+        for hx, hy in HOLES:
+            if abs(vx - hx) < 1.5 + 2.4 + 1 and abs(VENT_Y - hy) < VENT_H / 2 + 2.4 + 1:
+                errors.append("vent at x %.0f cuts into a board standoff" % vx)
+    if abs(CABLE_X) + CABLE_D / 2 + 0.1 > CAV_W / 2 - 0.2 - RIM_T - 1:
+        errors.append("power cable exit runs into the side rim")
+    if min(BOARD_VENTS_X) - 1.5 < bx1 + 2:
+        errors.append("vents run over the Seengreat board")
     for x, y in POSTS:
-        if y > 0 and abs(x - ACC_X) < max(10.2, ACC_FIN_W / 2) + POST_BASE_R + 0.5:
-            errors.append("panel column hits the accelerometer fin")
-    pins_bottom = ACC_PCB_Y - 1.6 - 8.5 - 14.0          # with jumper plugs on
-    if pins_bottom < VENT_Y - VENT_H / 2 - 30:
-        errors.append("accelerometer jumper plugs reach too far down")
+        if abs(x) - POST_BASE_R < max(abs(v) for v in BOARD_VENTS_X) + 1.5 + 1 and abs(y) - POST_BASE_R < abs(VENT_Y) + VENT_H / 2 + 1:
+            errors.append("vents cut into a panel screw column")
     if errors:
         raise SystemExit("CHECK FAILED:\n  " + "\n  ".join(errors))
     print("checks ok")
@@ -414,8 +393,7 @@ def check():
     print("  board: X %.1f..%.1f (right half seen from the front), Y %.1f..%.1f, speaker side facing the back" % (bx0, bx1, by0, by1))
     print("  board's USB-C %.0f mm in from the right wall; power cable leaves the back cover's bottom edge at x %.0f" %
           (USB_EDGE_GAP, CABLE_X))
-    print("  accelerometer: on a fin on the back cover at x %.0f, screws at depth %.1f mm (2x M3x6); shell is empty" %
-          (ACC_X, ACC_HOLES[0][1]))
+    print("  panel face %.1f mm behind the front edge; %d vent slots beside the speaker grille" % (FLUSH, len(BOARD_VENTS_X)))
     print("  room behind panel %.1f mm; underside socket ends %.1f mm in front of the lid -> %.1f mm to the panel" %
           (BACK_SPACE, socket_tip, BACK_SPACE - socket_tip))
 

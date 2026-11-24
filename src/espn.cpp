@@ -37,7 +37,9 @@ static int toInt(JsonVariantConst v) {
   return s ? atoi(s) : 0;
 }
 
-bool fetchScoreboard(const String &league, std::vector<Game> &out) {
+const char *espnSport(const String &lg) { return sportFor(lg); }
+
+bool fetchScoreboard(const String &league, std::vector<Game> &out, const String &query) {
   // Only keep the fields we use: a 250 KB response becomes ~10 KB in memory.
   JsonDocument filter;
   JsonObject ev = filter["events"][0].to<JsonObject>();
@@ -57,13 +59,16 @@ bool fetchScoreboard(const String &league, std::vector<Game> &out) {
                         "homeTimeouts", "awayTimeouts", "outs", "balls", "strikes", "onFirst", "onSecond", "onThird"})
     sit[k] = true;
   sit["lastPlay"]["text"] = true;
+  comp["broadcast"] = true;  // "CBS"
+  comp["odds"][0]["details"] = true;
+  comp["odds"][0]["overUnder"] = true;
   ev["status"]["period"] = true;
   ev["status"]["displayClock"] = true;
   ev["status"]["type"]["state"] = true;
   ev["status"]["type"]["shortDetail"] = true;
 
   String url = String("https://site.api.espn.com/apis/site/v2/sports/") + sportFor(league) + "/" + league +
-               "/scoreboard";
+               "/scoreboard" + (query.length() ? String("?") + query : String());
   JsonDocument doc;
   int code = httpGetJson(url, doc, &filter);
   if (code != 200) {
@@ -92,6 +97,9 @@ bool fetchScoreboard(const String &league, std::vector<Game> &out) {
     g.detail = e["status"]["type"]["shortDetail"] | "";
     g.clock = e["status"]["displayClock"] | "";
     g.period = e["status"]["period"] | 0;
+    g.tv = cp["broadcast"] | "";
+    g.line = cp["odds"][0]["details"] | "";
+    if (!cp["odds"][0]["overUnder"].isNull()) g.overUnder = String(cp["odds"][0]["overUnder"].as<float>(), 1);
     JsonObjectConst s = cp["situation"];
     if (!s.isNull()) {
       g.hasSit = true;

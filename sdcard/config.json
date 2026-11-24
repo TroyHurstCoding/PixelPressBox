@@ -23,10 +23,18 @@
              "aquarium": true, "double_pendulum": true, "newtons_cradle": true, "water": true,
              "beer": true, "portrait_clock": true, "hourglass": true, "lava_lamp": true,
              "trivia": true, "facts_quotes": true, "billboard": true, "fly_the_w": true,
-             "iss_map": true, "planets": true, "national_day": true, "surf": true, "hacker_news": true },
+             "iss_map": true, "planets": true, "national_day": true, "surf": true, "hacker_news": true,
+             "binary_clock": true, "sun_clock": true, "city_clock": true, "world_clock": true, "sand_clock": true,
+             "win_probability": true, "top_performers": true, "next_game": true, "golf": true, "fantasy_points": true,
+             "game_of_life": true, "visualizer": true, "planes": true },
+  "world_clocks": [ { "name": "LA", "utc": -8, "dst": "us" }, { "name": "NYC", "utc": -5, "dst": "us" },
+                    { "name": "LON", "utc": 0, "dst": "eu" }, { "name": "TOKYO", "utc": 9, "dst": "" } ],
+  "planes": { "radius_km": 40 },
+  "golf": { "tour": "pga" },
+  "mic": { "clap_control": false, "sensitivity": "high" },
   "billboard_years": [20, 30, 40],
   "surf": { "name": "Venice", "lat": 33.985, "lon": -118.475 },
-  "motion": { "orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true, "pitch_invert": false },
+  "motion": { "mount": "panel", "tap_force": "light", "orientation": "auto", "mirror": false, "taps": true, "flat_sleep": true, "pitch_invert": false },
   "ufc": { "show": true, "days_ahead": 10 },
 
   "leagues": ["nfl", "nba", "mlb"],
@@ -39,6 +47,15 @@
   "celebrate": { "nfl": true, "mlb": true, "nba": false },
   "celebrate_all": { "nfl": false, "mlb": false, "nba": false },
 
+  "fantasy_points": { "me": "My Team", "opp": "Opponent", "week": 0, "players": [],
+                      "scoring": { "passYds": 0.04, "passTD": 5, "passInt": -2, "rushYds": 0.1, "rushTD": 6,
+                                   "recYds": 0.1, "recTD": 6, "rec": 0.5, "fumLost": -2,
+                                   "fgMade": 3, "xpMade": 1, "fgMiss": -2, "xpMiss": -1,
+                                   "kickRetTD": 6, "puntRetTD": 6, "defTD": 6,
+                                   "tackleSolo": 0, "tackleTotal": 0, "sack": 1, "intDef": 1, "passDefended": 0, "fumRecovered": 1,
+                                   "dstSack": 1, "dstInt": 2, "dstFumRec": 2, "dstTD": 6, "dstSafety": 2, "dstRetTD": 0,
+                                   "pass400": 2, "rush150": 2, "rec150": 2 },
+                      "dst_points_allowed": [[0, 10], [6, 7], [13, 4], [20, 1], [27, 0], [34, -1], [999, -4]] },
   "fantasy_players": [
     { "name": "Shohei Ohtani", "league": "mlb", "team": "LAD" },
     { "name": "LeBron James", "league": "nba", "team": "LAL" }
@@ -55,7 +72,7 @@
   "brightness": 160,
   "night": { "start": 23, "end": 7, "brightness": 25 },
 
-  "panel": { "driver": "SHIFTREG", "swap_green_blue": false, "clk_phase": false },
+  "panel": { "driver": "SHIFTREG", "flip": false, "swap_green_blue": false, "clk_phase": false },
   "sound": { "enabled": true, "volume": 15, "quiet_at_night": true },
 
   "yahoo": { "client_id": "", "client_secret": "", "refresh_token": "", "team_key": "" }

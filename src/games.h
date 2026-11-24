@@ -1,10 +1,11 @@
 // games.h - tilt games for the accelerometer: Dodger (fly a plane through the trees), TiltyBird, MarbleRun,
-// Catch, Breakout, Racer and Balance. Each game is a little state machine driven 30 times a second.
+// Catch, Breakout, Racer, Balance, Pong, Simon, Lander and Reaction. Each game is a little state machine driven 30 times a second.
 // Without an accelerometer each game has an autopilot, so it can still be shown off (and tested).
 #pragma once
 #include <Arduino.h>
 
-enum GameId { G_DODGER, G_BIRD, G_MARBLE, G_CATCH, G_BREAKOUT, G_RACER, G_BALANCE, G_COUNT };
+enum GameId { G_DODGER, G_BIRD, G_MARBLE, G_CATCH, G_BREAKOUT, G_RACER, G_BALANCE, G_PONG, G_SIMON, G_LANDER, G_REACTION,
+              G_COUNT };
 
 struct GameInput {
   float roll = 0;   // -1..1: tilt toward the right edge = positive

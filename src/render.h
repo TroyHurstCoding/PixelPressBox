@@ -9,6 +9,7 @@ void displaySetRotation(int r);   // 0 landscape, 1/3 portrait (32 wide x 64 tal
 int displayRotation();
 void displaySetBrightness(uint8_t b);
 void drawMessage(const String &l1, const String &l2 = "", uint32_t color = 0xFFFFFF);
+void drawTapMenu(int sel, const char *const *items, int n);   // up to 4 rows, the chosen one in yellow
 void drawGame(const Game &g, time_t now, bool altPhase);
 void drawClock(time_t now, const String &sub, uint32_t subColor);
 void drawYahoo(const Card &c);

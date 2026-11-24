@@ -52,9 +52,11 @@ static void line(int x0, int y0, int x1, int y1, uint32_t c) {
   }
 }
 
-static const char *NAMES[G_COUNT] = {"DODGER", "TILTYBIRD", "MARBLERUN", "CATCH", "BREAKOUT", "RACER", "BALANCE"};
-static const char *HINTS[G_COUNT] = {"TILT TO BANK", "LEAN TO FLY", "TILT TO ROLL", "TILT TO MOVE",
-                                     "TILT PADDLE", "TILT TO STEER", "TILT TO LEVEL"};
+static const char *NAMES[G_COUNT] = {"DODGER", "TILTYBIRD", "MARBLERUN", "CATCH", "BREAKOUT", "RACER", "BALANCE",
+                                     "PONG", "SIMON", "LANDER", "REACTION"};
+static const char *HINTS[G_COUNT] = {"TILT BANK", "LEAN BACK", "TILT ROLL", "TILT MOVE",
+                                     "TILT PAD", "TILT STEER", "TILT LEVEL", "TILT PAD", "TILT+TAP",
+                                     "LEAN=BURN", "TAP ON GO"};
 const char *gameName(int id) { return NAMES[id % G_COUNT]; }
 const char *gameHint(int id) { return HINTS[id % G_COUNT]; }
 
@@ -98,28 +100,17 @@ static bool dodgerStep(const GameInput &in) {
 static void dodgerDraw(int frame) {
   gfxBegin();
   auto hy = [&](float x) { return 9.0f + (x - 32) * dgRoll * 0.22f; };  // banked horizon
-  for (int x = 0; x < 64; x++) {
-    int h = (int)lroundf(hy(x));
-    for (int y = 0; y < 32; y++) {
-      if (y < h) px(x, y, mix(0x3A7BD5, 0x9AC8F0, y / 10.0f));
-      else {
-        float depth = 12.0f / (y - h + 1.0f);  // distance of this ground row
-        bool band = ((int)floorf(depth + dgDist * 1.2f)) & 1;
-        px(x, y, band ? 0x1B4D1F : 0x2A6A2E);
-      }
-    }
-  }
-  std::vector<Tree *> order;
-  for (auto &tr : trees) order.push_back(&tr);
-  std::sort(order.begin(), order.end(), [](Tree *a, Tree *b) { return a->z > b->z; });
+  Tree *order[18];
+  for (int i = 0; i < 18; i++) order[i] = &trees[i];
+  std::sort(order, order + 18, [](Tree *a, Tree *b) { return a->z > b->z; });
   for (Tree *tr : order) {
     if (tr->z > 11) continue;
     float sx = 32 + (tr->wx - dgX) * 20 / tr->z;
     float base = hy(sx) + 21 / tr->z;
-    float h = std::max(3.0f, 13 / tr->z), w = std::max(tr->z < 6 ? 2.0f : 1.0f, 8.0f / tr->z);
+    float h = std::max(5.0f, 15 / tr->z), w = std::max(4.0f, 9.0f / tr->z);
     int tw = std::max(1, (int)(w / 3));
-    uint32_t leaf = tr->kind == 0 ? 0x66BB6A : tr->kind == 1 ? 0x4CAF50 : 0x81C784;
-    fill((int)(sx - tw / 2.0f), (int)(base - h * 0.35f), tw, (int)(h * 0.35f) + 1, 0x6D4C2F);
+    uint32_t leaf = tr->kind == 0 ? 0x8DE471 : tr->kind == 1 ? 0x62D6A0 : 0xC6E973;
+    fill((int)(sx - tw / 2.0f), (int)(base - h * 0.35f), tw, (int)(h * 0.35f) + 1, 0xBA8E67);
     for (int k = 0; k < (int)(h * 0.75f); k++) {  // a pine: widest at the bottom of the leaves
       float ww = w * (k + 1) / (h * 0.75f);
       fill((int)(sx - ww / 2), (int)(base - h * 0.3f - (h * 0.75f - k)), std::max(1, (int)ww), 1, leaf);
@@ -585,6 +576,309 @@ static GameInput balanceAuto() {
   return in;
 }
 
+// =============================================================== Pong: you at the bottom, the clock at the top
+static float pgX = 32, cpX = 32, bX = 32, bY = 16, bVX = 0.6f, bVY = 0.7f;
+static int pgLives = 3, pgServe = 0;
+static float cpAim = 0;  // where on its paddle the clock aims this rally (its mistakes)
+static void pongServe(bool towardYou) {
+  bX = 32, bY = 16;
+  float sp = 0.85f + std::min(0.6f, score * 0.04f);
+  float a = (fr() - 0.5f) * 1.1f;
+  bVX = sp * sinf(a);
+  bVY = sp * cosf(a) * (towardYou ? 1 : -1);
+  pgServe = 30;  // a second's pause before it moves
+  cpAim = (fr() - 0.5f) * 13;
+}
+static void pongReset() {
+  pgX = cpX = 32;
+  pgLives = 3;
+  pongServe(true);
+}
+static bool pongStep(const GameInput &in) {
+  t++;
+  pgX += (clampf(32 + in.roll * 28, 6, 58) - pgX) * 0.35f;
+  // the clock's paddle chases the ball, a little slower than it could
+  float cpSpeed = 0.40f + std::min(0.35f, score * 0.025f);
+  if (bVY < 0 && bY < 20) cpX += clampf(bX + cpAim - cpX, -cpSpeed, cpSpeed);
+  else cpX += clampf(32 - cpX, -0.3f, 0.3f);
+  cpX = clampf(cpX, 6, 58);
+  if (pgServe > 0) {
+    pgServe--;
+    return true;
+  }
+  bX += bVX;
+  bY += bVY;
+  if (bX < 0.5f) bX = 0.5f, bVX = fabsf(bVX);
+  if (bX > 62.5f) bX = 62.5f, bVX = -fabsf(bVX);
+  auto bounce = [&](float padX, bool down) {
+    float off = clampf((bX - padX) / 6, -1, 1);
+    float sp = std::min(2.0f, sqrtf(bVX * bVX + bVY * bVY) * 1.05f);
+    float a = off * 1.0f;
+    bVX = sp * sinf(a);
+    bVY = sp * cosf(a) * (down ? 1 : -1);
+  };
+  if (bVY > 0 && bY >= 28.5f && bY < 30.5f && fabsf(bX - pgX) <= 6.5f) bounce(pgX, false), bY = 28.5f;
+  if (bVY < 0 && bY <= 2.5f && bY > 0.5f && fabsf(bX - cpX) <= 6.5f) {
+    bounce(cpX, true), bY = 2.5f;
+    cpAim = (fr() - 0.5f) * 13;
+  }
+  if (bY < -1) {  // got past the clock
+    score++;
+    pongServe(true);
+  } else if (bY > 33) {
+    if (--pgLives <= 0) return false;
+    pongServe(false);
+  }
+  return true;
+}
+static void pongDraw(int frame) {
+  gfxBegin();
+  for (int x = 0; x < 64; x += 4) px(x, 15, 0x202838), px(x + 1, 15, 0x202838);
+  fill((int)lroundf(cpX) - 6, 1, 13, 2, 0xFF6060);
+  fill((int)lroundf(pgX) - 6, 29, 13, 2, 0x40C0FF);
+  if (pgServe == 0 || (frame / 4) % 2) fill((int)lroundf(bX) - 1, (int)lroundf(bY) - 1, 2, 2, 0xFFFFFF);
+  txt(String(score), 1, 12, 0x506070);
+  for (int i = 0; i < pgLives; i++) px(62 - i * 2, 13, 0x40C0FF);
+  gfxEnd();
+}
+static GameInput pongAuto() {
+  GameInput in;
+  float target = 32;
+  if (bVY > 0) {  // where it will cross the bottom
+    float x = bX, y = bY, vx = bVX;
+    for (int i = 0; i < 200 && y < 28.5f; i++) {
+      x += vx, y += bVY;
+      if (x < 0.5f || x > 62.5f) vx = -vx;
+    }
+    target = x + (score % 3 - 1) * 2.5f;
+  }
+  in.roll = clampf((target - 32) / 28, -1, 1);
+  return in;
+}
+
+// =============================================================== Simon: repeat the colours; tilt picks, tap presses
+static uint8_t smSeq[64];
+static int smLen = 0, smPos = 0, smPhase = 0, smTimer = 0, smLit = -1, smCursor = 0, smFlash = 0;
+static const uint32_t SM_COL[4] = {0xFF2D2D, 0x2DFF5A, 0x2D7DFF, 0xFFD02D};
+static void simonNext() {
+  smSeq[smLen++] = rnd() % 4;
+  smPos = 0;
+  smPhase = 0;  // showing
+  smTimer = 25;
+}
+static void simonReset() {
+  smLen = 0;
+  smCursor = 1;
+  simonNext();
+}
+static bool simonStep(const GameInput &in) {
+  t++;
+  smCursor = clampf((int)((in.roll + 1) * 2), 0, 3);
+  int on = std::max(8, 18 - smLen), off = std::max(4, 7 - smLen / 3);
+  if (smPhase == 0) {  // play the sequence back
+    if (--smTimer > 0) return true;
+    int step = smPos / 2;
+    if (step >= smLen) {
+      smPhase = 1, smPos = 0, smLit = -1, smTimer = 150;
+      return true;
+    }
+    smLit = smPos % 2 == 0 ? smSeq[step] : -1;
+    smTimer = smPos % 2 == 0 ? on : off;
+    smPos++;
+    return true;
+  }
+  if (smPhase == 1) {  // your turn: 5 s for each press
+    if (smFlash > 0 && --smFlash == 0) smLit = -1;
+    if (in.tap) {
+      smLit = smCursor;
+      smFlash = 8;
+      if (smCursor != smSeq[smPos]) return false;
+      smTimer = 150;
+      if (++smPos >= smLen) {
+        score = smLen;
+        smPhase = 2, smTimer = 30;
+      }
+    } else if (--smTimer <= 0) {
+      return false;  // too slow
+    }
+    return true;
+  }
+  if (--smTimer <= 0) simonNext();  // smPhase 2: well done, a pause before the next round
+  return smLen < 64;
+}
+static void simonDraw(int frame) {
+  gfxBegin();
+  for (int i = 0; i < 4; i++) {
+    bool lit = smLit == i || (smPhase == 2 && (frame / 4) % 2);
+    fill(i * 16 + 1, 2, 14, 24, lit ? SM_COL[i] : mix(0x000000, SM_COL[i], 0.18f));
+    if (smPhase == 1 && smCursor == i) fill(i * 16 + 1, 28, 14, 2, 0xFFFFFF);
+  }
+  if (smPhase == 0) txtC(String(smLen), 11, 0xFFFFFF);
+  gfxEnd();
+}
+static GameInput simonAuto() {
+  GameInput in;
+  if (smPhase != 1) return in;
+  int want = smSeq[smPos];
+  if (smLen > 7 && (rnd() % 100) < 2) want = (want + 1) % 4;  // the autopilot slips up eventually
+  in.roll = -0.75f + want * 0.5f;
+  in.tap = smCursor == want && (t % 9 == 0);
+  return in;
+}
+
+// =============================================================== Lander: lean back to fire the engine, tilt to drift
+static uint8_t ldGround[64];
+static int ldPad = 28, ldPadW = 9, ldLevel = 0, ldDone = 0;
+static float ldX, ldY, ldVX, ldVY, ldFuel;
+static bool ldBurn = false;
+static void landerLevel() {
+  ldPadW = std::max(5, 9 - ldLevel);
+  ldPad = 4 + rnd() % (56 - ldPadW);
+  float h = 26 + fr() * 3;
+  for (int x = 0; x < 64; x++) {
+    h = clampf(h + (fr() - 0.5f) * 3.2f, 18, 30);
+    ldGround[x] = (uint8_t)h;
+  }
+  int padY = 22 + rnd() % 7;
+  for (int x = ldPad; x < ldPad + ldPadW; x++) ldGround[x] = padY;
+  ldX = ldPad < 32 ? 54 : 8;
+  ldY = 3;
+  ldVX = ldPad < 32 ? -0.15f : 0.15f;
+  ldVY = 0;
+  ldFuel = 100;
+  ldDone = 0;
+}
+static void landerReset() {
+  ldLevel = 0;
+  landerLevel();
+}
+static bool landerStep(const GameInput &in) {
+  t++;
+  if (ldDone) {  // landed: a moment to enjoy it, then the next pad
+    if (--ldDone == 0) ldLevel++, landerLevel();
+    return true;
+  }
+  float g = 0.010f + ldLevel * 0.0015f;
+  ldBurn = (in.pitch > 0.25f || in.tap) && ldFuel > 0;
+  if (ldBurn) ldVY -= 0.024f, ldFuel -= 0.45f;
+  if (fabsf(in.roll) > 0.15f && ldFuel > 0) ldVX += in.roll * 0.006f, ldFuel -= 0.1f;
+  ldVY += g;
+  ldX += ldVX;
+  ldY += ldVY;
+  if (ldX < 1) ldX = 1, ldVX = 0;
+  if (ldX > 62) ldX = 62, ldVX = 0;
+  if (ldY < 1) ldY = 1, ldVY = std::max(0.0f, ldVY);
+  int gx = (int)lroundf(ldX);
+  if (ldY + 1.5f >= std::min(ldGround[std::max(0, gx - 1)], std::min(ldGround[gx], ldGround[std::min(63, gx + 1)]))) {
+    bool onPad = gx - 1 >= ldPad && gx + 1 < ldPad + ldPadW;
+    if (onPad && ldVY < 0.32f && fabsf(ldVX) < 0.22f) {
+      score += 50 + (int)ldFuel / 2;
+      ldDone = 45;
+      ldVX = ldVY = 0;
+      return true;
+    }
+    return false;  // crashed
+  }
+  return true;
+}
+static void landerDraw(int frame) {
+  gfxBegin();
+  for (int i = 0; i < 14; i++) px((i * 37 + 11) % 64, (i * 23 + 5) % 16, 0x404060);
+  for (int x = 0; x < 64; x++) {
+    fill(x, ldGround[x], 1, 32 - ldGround[x], 0x3A3A44);
+    px(x, ldGround[x], 0x70707C);
+  }
+  bool padLit = (frame / 6) % 2 || ldDone;
+  fill(ldPad, ldGround[ldPad], ldPadW, 1, padLit ? 0xFFD000 : 0x806800);
+  int x = (int)lroundf(ldX), y = (int)lroundf(ldY);
+  fill(x - 1, y - 1, 3, 2, 0xE0E0E0);
+  px(x - 1, y + 1, 0xA0A0A0), px(x + 1, y + 1, 0xA0A0A0);
+  if (ldBurn && !ldDone) px(x, y + 1 + (frame % 2), (frame / 2) % 2 ? 0xFF8000 : 0xFFE000);
+  // fuel and speed
+  fill(0, 0, (int)(ldFuel * 0.2f), 1, ldFuel > 25 ? 0x30C0FF : 0xFF4040);
+  bool safe = ldVY < 0.32f && fabsf(ldVX) < 0.22f;
+  px(63, 0, safe ? 0x40FF60 : 0xFF3030);
+  if (ldDone) txtC("LANDED", 8, 0x40FF60);
+  txt(String(score), 1, 2, 0x707080);
+  gfxEnd();
+}
+static GameInput landerAuto() {
+  GameInput in;
+  float padX = ldPad + ldPadW / 2.0f;
+  float wantVX = clampf((padX - ldX) * 0.02f, -0.18f, 0.18f);
+  in.roll = clampf((wantVX - ldVX) * 12, -1, 1);
+  float h = ldGround[(int)lroundf(ldX)] - ldY;
+  float wantVY = fabsf(padX - ldX) > 4 ? (h > 12 ? 0.05f : -0.05f) : std::min(0.25f, 0.06f + h * 0.012f);
+  in.pitch = ldVY > wantVY ? 1 : 0;
+  return in;
+}
+
+// =============================================================== Reaction: wait for green, then tap
+static int rxRound = 0, rxState = 0, rxTimer = 0, rxTotal = 0, rxLast = 0;
+static const int RX_ROUNDS = 5;
+static void reactionReset() {
+  rxRound = 0;
+  rxTotal = 0;
+  rxState = 0;
+  rxTimer = 45 + rnd() % 75;  // 1.5 - 4 s of red
+}
+static bool reactionStep(const GameInput &in) {
+  t++;
+  switch (rxState) {
+    case 0:  // red: wait
+      if (in.tap) {
+        rxLast = -1;  // too soon: counts as a full second
+        rxTotal += 1000;
+        rxState = 2, rxTimer = 40;
+      } else if (--rxTimer <= 0) {
+        rxState = 1, rxTimer = 0;
+      }
+      break;
+    case 1:  // green: count frames until the tap
+      rxTimer++;
+      if (in.tap || rxTimer > 60) {
+        rxLast = in.tap ? (int)lroundf(rxTimer * 33.3f) : 2000;
+        rxTotal += std::min(rxLast, 1000);
+        rxState = 2, rxTimer = 40;
+      }
+      break;
+    case 2:  // show the time
+      if (--rxTimer <= 0) {
+        if (++rxRound >= RX_ROUNDS) rxState = 3, rxTimer = 75;
+        else rxState = 0, rxTimer = 45 + rnd() % 75;
+      }
+      break;
+    default:  // the average, then game over
+      score = std::max(0, 1000 - rxTotal / RX_ROUNDS);
+      if (--rxTimer <= 0) return false;
+  }
+  return true;
+}
+static void reactionDraw(int frame) {
+  gfxBegin();
+  if (rxState == 0) {
+    fill(0, 0, 64, 32, 0x400000);
+    txtC("WAIT", 8, 0xFF4040);
+    txtC(String(rxRound + 1) + "/" + String(RX_ROUNDS), 20, 0x803030);
+  } else if (rxState == 1) {
+    fill(0, 0, 64, 32, 0x00A030);
+    txtC("TAP!", 12, 0xFFFFFF);
+  } else if (rxState == 2) {
+    if (rxLast < 0) txtC("TOO SOON", 12, 0xFF6040);
+    else txtC(String(rxLast) + " MS", 12, rxLast < 300 ? 0x40FF60 : rxLast < 450 ? 0xFFD000 : 0xFF6040);
+  } else {
+    txtC("AVERAGE", 4, 0xA0A0A0);
+    txtC(String(rxTotal / RX_ROUNDS) + " MS", 16, 0xFFFFFF);
+  }
+  (void)frame;
+  gfxEnd();
+}
+static GameInput reactionAuto() {
+  GameInput in;
+  in.tap = rxState == 1 && rxTimer >= 7 + (int)(rxRound * 3 % 4);
+  return in;
+}
+
 // =============================================================== dispatch
 void gameReset(int id, uint32_t seed) {
   rs = seed ? seed : 1;
@@ -597,6 +891,10 @@ void gameReset(int id, uint32_t seed) {
     case G_CATCH: catchReset(); break;
     case G_BREAKOUT: breakoutReset(); break;
     case G_RACER: racerReset(); break;
+    case G_PONG: pongReset(); break;
+    case G_SIMON: simonReset(); break;
+    case G_LANDER: landerReset(); break;
+    case G_REACTION: reactionReset(); break;
     default: balanceReset(); break;
   }
 }
@@ -608,6 +906,10 @@ bool gameStep(int id, const GameInput &in) {
     case G_CATCH: return catchStep(in);
     case G_BREAKOUT: return breakoutStep(in);
     case G_RACER: return racerStep(in);
+    case G_PONG: return pongStep(in);
+    case G_SIMON: return simonStep(in);
+    case G_LANDER: return landerStep(in);
+    case G_REACTION: return reactionStep(in);
     default: return balanceStep(in);
   }
 }
@@ -619,6 +921,10 @@ void gameDraw(int id, int frame) {
     case G_CATCH: catchDraw(frame); break;
     case G_BREAKOUT: breakoutDraw(frame); break;
     case G_RACER: racerDraw(frame); break;
+    case G_PONG: pongDraw(frame); break;
+    case G_SIMON: simonDraw(frame); break;
+    case G_LANDER: landerDraw(frame); break;
+    case G_REACTION: reactionDraw(frame); break;
     default: balanceDraw(frame); break;
   }
 }
@@ -631,6 +937,10 @@ GameInput gameAutopilot(int id) {
     case G_CATCH: return catchAuto();
     case G_BREAKOUT: return breakoutAuto();
     case G_RACER: return racerAuto();
+    case G_PONG: return pongAuto();
+    case G_SIMON: return simonAuto();
+    case G_LANDER: return landerAuto();
+    case G_REACTION: return reactionAuto();
     default: return balanceAuto();
   }
 }
@@ -638,15 +948,10 @@ GameInput gameAutopilot(int id) {
 // =============================================================== menu / ready / game over
 void drawGameMenu(int sel, int best, int frame) {
   gfxBegin();
-  txtC("GAMES", 0, 0x707070);
-  String n = gameName(sel);
-  txtC(n, 11, 0xFFC000);
-  bool blink = (frame / 10) % 2;
-  if (blink) {
-    txt("<", 0, 11, 0x606060);
-    txt(">", 59, 11, 0x606060);
-  }
-  txtC(best > 0 ? "BEST " + String(best) : String("TAP=PLAY"), 23, 0x40C0FF);
+  txtC("TILT < >", 0, 0x9CAAB6);
+  txtC(gameName(sel), 11, 0xFFD16A);
+  String record = best > 0 ? "BEST " + String(best) : String();
+  txtC((frame / 45) % 2 && record.length() <= 10 && record.length() ? record : String("TAP=PLAY"), 23, 0x80D7FF);
   gfxEnd();
 }
 void drawGameReady(int id, int frame) {

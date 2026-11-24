@@ -21,6 +21,7 @@
 #include "autoupdate.h"
 #include "holidays.h"
 #include "msgraph.h"
+#include "net.h"
 #include "spotify.h"
 #include "todo.h"
 #include "weather.h"
@@ -29,6 +30,9 @@
 #include <functional>
 #include "render2.h"
 #include "feeds2.h"
+#include "feeds3.h"
+#include "fantasy.h"
+#include "render3.h"
 #include "motion.h"
 #include "games.h"
 #include "render.h"
@@ -36,6 +40,7 @@
 #include "settings.h"
 #include "sound.h"
 #include "web.h"
+#include "wifinet.h"
 #include "yahoo.h"
 
 
@@ -90,6 +95,15 @@ static IssFix iss;
 static GameResult flyW;
 static uint32_t nextTrivia = 0, nextFact = 0, nextHn = 0, nextSurf = 0, nextIss = 0, nextFlyW = 0, nextDaily3 = 0;
 static int daily3Day = -1;
+// batch 4 data
+static FptsBoard fpts;
+static FantasyCache fantasyCache;  // netTask only
+static std::map<String, WinProb> winProbs;                    // by game key
+static std::map<String, std::vector<Highlight>> highlights;   // by game key (finals)
+static GolfBoard golf;
+static std::vector<NextGame> nextGames;
+static std::vector<Flight> flights;
+static uint32_t nextFpts = 0, nextExtras = 0, nextGolf = 0, nextNextGame = 0, nextFlights = 0;
 static bool cardWantsTaps = false, cardTapped = false;  // interactive screens take single taps themselves
 static bool flatSleeping = false;
 static uint32_t flatSince = 0;
@@ -182,8 +196,10 @@ static int pump(uint32_t ms) {
     motionPoll();
     if (motion().present) {
       const Motion &m = motion();
-      if (CFG.flatSleep) {  // lying flat: screen off until it's picked up
-        if (m.flat) {
+      // lying flat: screen off until it's picked up. Only once the sensor's mounting has been calibrated, so a
+      // sensor mounted some other way round can never blank the screen while the clock is standing up.
+      if (CFG.flatSleep || flatSleeping) {
+        if (m.flat && m.calibrated && CFG.flatSleep) {
           if (!flatSince) flatSince = millis();
           if (!flatSleeping && millis() - flatSince > 2000) {
             flatSleeping = true;
@@ -212,10 +228,11 @@ static int pump(uint32_t ms) {
           if (cardWantsTaps) cardTapped = true;
           else return 1;  // tap: next card
         } else if (tap == 2) {
-          return cardWantsTaps ? 1 : 2;  // double tap: next (on interactive screens) / focus timer
+          return cardWantsTaps ? 1 : 6;  // double tap: next (on interactive screens) / the tap menu
         }
       }
     }
+    if (CFG.clapControl && soundReady && micTakeDoubleClap()) return 1;  // two claps: next screen
     if (webWantsRestart) {
       delay(300);
       ESP.restart();
@@ -328,6 +345,8 @@ static bool refreshData() {
   }
 
   if (!CFG.fantasy.empty() && (int32_t)(millis() - nextFantasy) >= 0) {
+    static std::map<String, std::map<String, StatLine>> finalLines;
+    std::map<String, std::map<String, StatLine>> trackedFinals;
     std::vector<Card> cards;
     for (auto &lg : CFG.leagues)
       for (auto &g : games[lg]) {
@@ -336,9 +355,18 @@ static bool refreshData() {
         for (auto &p : CFG.fantasy)
           if (p.league == g.league && (p.team == g.away.abbr || p.team == g.home.abbr)) want.push_back(p);
         if (want.empty()) continue;
-        std::map<String, StatLine> lines;
-        if (!fetchBoxLines(g, want, lines)) continue;
-        for (auto &kv : lines) {
+        String gameKey = g.league + ":" + g.id;
+        auto cached = finalLines.find(gameKey);
+        std::map<String, StatLine> liveLines;
+        const std::map<String, StatLine> *lines = &liveLines;
+        if (g.state == 'f' && cached != finalLines.end()) {
+          lines = &trackedFinals.emplace(gameKey, std::move(cached->second)).first->second;
+        } else {
+          if (!fetchBoxLines(g, want, liveLines)) continue;
+          if (g.state == 'f' && !liveLines.empty())
+            lines = &trackedFinals.emplace(gameKey, std::move(liveLines)).first->second;
+        }
+        for (const auto &kv : *lines) {
           Card c;
           c.kind = CARD_FANTASY;
           c.key = "fan:" + kv.first;
@@ -352,9 +380,10 @@ static bool refreshData() {
           cards.push_back(c);
         }
       }
+    finalLines.swap(trackedFinals);
     {
       Lock lock;
-      fantasyCards = cards;
+      fantasyCards = std::move(cards);
     }
     nextFantasy = millis() + CFG.pollFantasy * 1000UL;
     changed = true;
@@ -373,12 +402,21 @@ static bool refreshData() {
     std::vector<Meeting> m;
     std::vector<String> f;
     bool okM, okF;
+    String taskToken;
     {
       Lock lock;  // msgraph keeps its token in shared state; calendar calls are quick
       okM = msFetchCalendar(now, m);
       okF = msFetchFlagged(f);
       if (okM) meetings = m;
       if (okF) flagged = f;
+      if (CFG.msTodo) taskToken = msTaskToken();
+    }
+    if (taskToken.length()) {
+      std::vector<String> tasks;
+      if (msFetchTasks(taskToken, tasks)) {
+        Lock lock;
+        if (msTaskTokenCurrent(taskToken)) todoSetMicrosoft(std::move(tasks));
+      }
     }
     nextCalendar = millis() + CFG.pollCalendar * 1000UL;
     changed = true;
@@ -538,6 +576,97 @@ static bool refreshData() {
     changed |= ok;
   }
 
+  // ---- batch 4 feeds
+  if (CFG.cardFpts && !CFG.fptsPlayers.empty() && (int32_t)(millis() - nextFpts) >= 0) {
+    std::vector<Game> nfl;
+    bool ok;
+    if (CFG.fptsWeek == 0 && CFG.has(CFG.leagues, "nfl")) {
+      nfl = games["nfl"];  // only this task writes games, so reading it here needs no lock
+      ok = !nfl.empty();
+    } else {
+      ok = fetchScoreboard("nfl", nfl, CFG.fptsWeek ? "week=" + String(CFG.fptsWeek) + "&seasontype=2" : String());
+    }
+    bool live = false;
+    if (ok) {
+      FptsBoard b = fantasyBuild(nfl, fantasyFetchSummary, fantasyCache);
+      live = b.anyLive;
+      Lock lock;
+      fpts = b;
+    }
+    nextFpts = millis() + (live ? CFG.pollFantasy : ok ? 600 : 120) * 1000UL;
+    changed = true;
+  }
+  if ((CFG.cardWinProb || CFG.cardHighlights) && CFG.sports != "off" && (int32_t)(millis() - nextExtras) >= 0) {
+    // favorite games: the win-probability line while live, and once more (with top performers) when final
+    std::map<String, WinProb> wp;
+    std::map<String, std::vector<Highlight>> hl;
+    {
+      Lock lock;
+      wp = winProbs;
+      hl = highlights;
+    }
+    std::vector<String> keep;
+    for (auto &lg : CFG.leagues)
+      for (auto &g : games[lg]) {
+        if (!isFavoriteGame(g) || g.state == 'p' || priorityOf(g, now) <= 0) continue;
+        String k = g.key();
+        keep.push_back(k);
+        bool finalDone = g.state == 'f' && hl.count(k);
+        if (finalDone) continue;
+        WinProb w;
+        std::vector<Highlight> h;
+        if (fetchGameExtras(g, g.state == 'f', w, h)) {
+          wp[k] = w;
+          if (g.state == 'f') hl[k] = h;
+        }
+      }
+    for (auto it = wp.begin(); it != wp.end();) it = CFG.has(keep, it->first) ? std::next(it) : wp.erase(it);
+    for (auto it = hl.begin(); it != hl.end();) it = CFG.has(keep, it->first) ? std::next(it) : hl.erase(it);
+    {
+      Lock lock;
+      winProbs = wp;
+      highlights = hl;
+    }
+    nextExtras = millis() + std::max(30, CFG.pollLive) * 1000UL;
+    changed = true;
+  }
+  if (CFG.cardGolf && CFG.sports != "off" && (int32_t)(millis() - nextGolf) >= 0) {
+    GolfBoard gb;
+    bool ok = fetchGolf(CFG.golfTour, gb);
+    if (ok) {
+      Lock lock;
+      golf = gb;
+    }
+    nextGolf = millis() + (ok ? (gb.state == 'i' ? 180 : 1800) : 600) * 1000UL;
+    changed |= ok;
+  }
+  if (CFG.cardNextGame && CFG.sports != "off" && (int32_t)(millis() - nextNextGame) >= 0) {
+    std::vector<NextGame> ng;
+    bool ok = true;
+    for (auto &f : CFG.favorites) {
+      if (!CFG.has(CFG.leagues, f.first)) continue;
+      NextGame n;
+      if (!fetchNextGame(f.first, f.second, now, n)) ok = false;
+      else if (n.ok) ng.push_back(n);
+    }
+    {
+      Lock lock;
+      nextGames = ng;
+    }
+    nextNextGame = millis() + (ok ? 3 * 3600 : 900) * 1000UL;
+    changed = true;
+  }
+  if (CFG.cardFlights && (CFG.lat != 0 || CFG.lon != 0) && (int32_t)(millis() - nextFlights) >= 0) {
+    std::vector<Flight> f;
+    bool ok = fetchFlights(CFG.lat, CFG.lon, CFG.flightRadiusKm, f);
+    if (ok) {
+      Lock lock;
+      flights = f;
+    }
+    nextFlights = millis() + (ok ? 300 : 900) * 1000UL;  // OpenSky allows ~400 anonymous calls a day
+    changed |= ok;
+  }
+
   if (CFG.ufc && (int32_t)(millis() - nextUfc) >= 0) {
     std::vector<FightEvent> u;
     bool ok = fetchUfc(u);
@@ -634,6 +763,72 @@ static void rebuild() {
   if (CFG.cardIss && iss.ok) ambient(CARD_ISS, "iss", 10, PRI_AMBIENT + 1);
   if (CFG.cardPlanets && CFG.lat != 0) ambient(CARD_PLANETS, "planets", 10, PRI_AMBIENT + 1);
   if (CFG.cardFlyW && flyW.ok && flyW.won && now - flyW.when < 22 * 3600) ambient(CARD_FLYW, "flyw", 10, PRI_FAV_FINAL - 1);
+  // ---- batch 4
+  if (CFG.cardBinary) ambient(CARD_BINARY, "binary", 10, PRI_AMBIENT);
+  if (CFG.cardSunArc) ambient(CARD_SUNARC, "sunarc", 10, PRI_AMBIENT);
+  if (CFG.cardCity) ambient(CARD_CITY, "city", 12, PRI_AMBIENT);
+  if (CFG.cardWorld && !CFG.worldClocks.empty()) ambient(CARD_WORLD, "world", 8, PRI_AMBIENT + 1);
+  if (CFG.cardSand) ambient(CARD_SAND, "sand", 15, PRI_AMBIENT);
+  if (CFG.cardLife) ambient(CARD_LIFE, "life", 15, PRI_AMBIENT);
+  if (CFG.cardVisualizer && soundReady && micPresent()) ambient(CARD_VISUALIZER, "visualizer", 15, PRI_AMBIENT);
+  if (CFG.cardFlights && !flights.empty()) ambient(CARD_FLIGHTS, "planes", 10, PRI_AMBIENT + 1);
+  if (CFG.cardFpts && fpts.ok) {
+    Card c;
+    c.kind = CARD_FPTS;
+    c.key = "fpts";
+    c.dwell = 12;
+    c.live = fpts.anyLive;
+    c.pri = fpts.anyLive ? PRI_FAV_LIVE : fpts.anyStarted ? PRI_FANTASY + 5 : PRI_AMBIENT + 2;
+    extra.push_back(c);
+  }
+  std::vector<String> nextIds;  // favorites' pre-game cards are replaced by the richer "next game" card
+  if (CFG.sports != "off") {
+    if (CFG.cardWinProb)
+      for (auto &kv : winProbs) {
+        if (!kv.second.ok) continue;
+        Card c;
+        c.kind = CARD_WINPROB;
+        c.key = "wp:" + kv.first;
+        c.text = kv.first;
+        c.title = kv.second.game.away.abbr + " @ " + kv.second.game.home.abbr;
+        c.dwell = 8;
+        c.pri = kv.second.game.state == 'i' ? PRI_FAV_LIVE : PRI_FAV_FINAL - 1;
+        extra.push_back(c);
+      }
+    if (CFG.cardHighlights)
+      for (auto &kv : highlights) {
+        if (kv.second.empty()) continue;
+        Card c;
+        c.kind = CARD_HIGHLIGHT;
+        c.key = "hl:" + kv.first;
+        c.text = kv.first;
+        c.title = kv.second[0].team;
+        c.dwell = 4 * (int)kv.second.size();
+        c.pri = PRI_FAV_FINAL - 2;
+        extra.push_back(c);
+      }
+    if (CFG.cardGolf && golf.ok && (golf.state == 'i' || (golf.state == 'f' && now - golf.start < 5 * 86400))) {
+      Card c;
+      c.kind = CARD_GOLF;
+      c.key = "golf";
+      c.dwell = 3 * golfPages(golf);
+      c.pri = golf.state == 'i' ? PRI_ALL_LIVE : PRI_AMBIENT + 3;
+      extra.push_back(c);
+    }
+    if (CFG.cardNextGame)
+      for (auto &n : nextGames) {
+        if (n.start + 4 * 3600 < now) continue;
+        Card c;
+        c.kind = CARD_NEXTGAME;
+        c.key = "next:" + n.league + ":" + n.us;
+        c.text = n.league + ":" + n.us;
+        c.title = n.us;
+        c.dwell = 8;
+        c.pri = n.start - now < CFG.upcomingHours * 3600L ? PRI_FAV_PRE : PRI_AMBIENT + 3;
+        extra.push_back(c);
+        nextIds.push_back(n.league + ":" + n.id);
+      }
+  }
   if (motionPortrait()) {  // standing on its end: only the tall screens (and water, which follows gravity)
     std::vector<Card> p;
     auto add = [&](CardKind k, const char *key, int dwell) {
@@ -644,20 +839,22 @@ static void rebuild() {
       c.pri = PRI_AMBIENT;
       p.push_back(c);
     };
-    std::vector<std::pair<CardKind, const char *>> tall;
-    if (CFG.cardBeer) tall.push_back({CARD_BEER, "beer"});
-    if (CFG.cardHourglass) tall.push_back({CARD_HOURGLASS, "hourglass"});
-    if (CFG.cardLava) tall.push_back({CARD_LAVA, "lava"});
-    if (CFG.cardWater) tall.push_back({CARD_WATER, "water"});
-    for (auto &t : tall) {
-      if (CFG.cardPClock) add(CARD_PCLOCK, "pclock", CFG.clockDwell);
-      add(t.first, t.second, 20);
-    }
+    if (CFG.cardPClock) add(CARD_PCLOCK, "pclock", CFG.clockDwell);
+    if (CFG.cardBeer) add(CARD_BEER, "beer", 20);
+    if (CFG.cardHourglass) add(CARD_HOURGLASS, "hourglass", 20);
+    if (CFG.cardLava) add(CARD_LAVA, "lava", 20);
+    if (CFG.cardWater) add(CARD_WATER, "water", 20);
     if (p.empty()) add(CARD_PCLOCK, "pclock", CFG.clockDwell);
     rot.update(p);
     return;
   }
   std::vector<Card> cards = buildCards(all, now, extra);
+  if (!nextIds.empty()) {
+    std::vector<Card> f;
+    for (auto &c : cards)
+      if (!(c.kind == CARD_GAME && c.game.state == 'p' && CFG.has(nextIds, c.game.key()))) f.push_back(c);
+    cards = f;
+  }
   if (favOnly || CFG.sports == "favorites") {  // drop non-favorite games, keep everything else
     std::vector<Card> f;
     for (auto &c : cards)
@@ -871,6 +1068,135 @@ static int showCard3(const Card *c) {
   }
 }
 
+// the favorite's next game, with the scoreboard's line, TV and colours when it has them
+static NextGame nextGameFor(const String &key) {
+  NextGame n;
+  for (auto &x : nextGames)
+    if (x.league + ":" + x.us == key) n = x;
+  if (!n.ok) return n;
+  for (auto &g : games[n.league]) {
+    const Team *us = g.away.abbr == n.us ? &g.away : g.home.abbr == n.us ? &g.home : nullptr;
+    if (us) n.usColor = teamColor(*us);
+    const Team *them = g.away.abbr == n.them ? &g.away : g.home.abbr == n.them ? &g.home : nullptr;
+    if (them) n.themColor = teamColor(*them);
+    if (g.id == n.id) {
+      n.line = g.line;
+      n.overUnder = g.overUnder;
+      if (g.tv.length()) n.tv = g.tv;
+    }
+  }
+  n.tv.toUpperCase();
+  return n;
+}
+
+// batch 4 screens; -1 = not one of them
+static int showCard4(const Card *c) {
+  auto animate = [&](int frameMs, std::function<void(int)> draw) {
+    uint32_t t0 = millis();
+    for (int f = 0; millis() - t0 < (uint32_t)c->dwell * 1000; f++) {
+      draw(f);
+      int r = pump(frameMs);
+      if (r) return r;
+    }
+    return 0;
+  };
+  switch (c->kind) {
+    case CARD_BINARY: return animate(250, [&](int) { drawBinaryClock(nowUtc()); });
+    case CARD_SUNARC: return animate(1000, [&](int) { drawSunArcClock(nowUtc(), CFG.lat, CFG.lon); });
+    case CARD_CITY: return animate(60, [&](int f) { drawCityClock(nowUtc(), f); });
+    case CARD_WORLD: return animate(1000, [&](int) { drawWorldClock(nowUtc()); });
+    case CARD_SAND:
+      return animate(40, [&](int f) {
+        float gx = 0, gy = 1;
+        if (motion().present) logicalGravity(displayRotation(), gx, gy);
+        drawSandClock(nowUtc(), gx, gy, f == 0);
+      });
+    case CARD_LIFE:
+      return animate(40, [&](int f) {
+        bool poke = cardTapped;
+        cardTapped = false;
+        drawLife(f, f == 0, poke);
+      });
+    case CARD_VISUALIZER: {
+      micUse(true, CFG.clapControl);
+      uint8_t b[16];
+      int r = animate(33, [&](int f) {
+        int n = micBands(b, 16);
+        drawVisualizer(b, n, micPresent(), f);
+      });
+      micUse(false, CFG.clapControl);
+      return r;
+    }
+    case CARD_FLIGHTS: {
+      std::vector<Flight> f0 = flights;
+      int n = std::max<int>(1, std::min<int>(3, f0.size()));
+      return animate(50, [&](int f) { drawFlights(f0, (f / 60) % n, CFG.flightRadiusKm, f); });
+    }
+    case CARD_WINPROB: {
+      auto it = winProbs.find(c->text);
+      if (it == winProbs.end()) return 0;
+      WinProb w = it->second;
+      for (auto &g : games[w.game.league])  // fresher score and clock than the last summary download
+        if (g.id == w.game.id) w.game = g;
+      return animate(250, [&](int f) { drawWinProb(w, nowUtc(), (f / 10) % 3 == 2); });
+    }
+    case CARD_GOLF: {
+      GolfBoard g0 = golf;
+      int pages = golfPages(g0);
+      for (int p = 0; p < pages; p++) {
+        drawGolf(g0, p);
+        int r = pump(3000);
+        if (r) return r;
+      }
+      return 0;
+    }
+    case CARD_NEXTGAME: {
+      NextGame n = nextGameFor(c->text);
+      if (!n.ok) return 0;
+      return animate(500, [&](int f) { drawNextGame(n, nowUtc(), (f / 5) % 2 == 1); });
+    }
+    case CARD_HIGHLIGHT: {
+      auto it = highlights.find(c->text);
+      if (it == highlights.end()) return 0;
+      std::vector<Highlight> hs = it->second;
+      Game g;
+      for (auto &lg : CFG.leagues)
+        for (auto &x : games[lg])
+          if (x.key() == c->text) g = x;
+      for (auto &h : hs) {
+        const Team &us = g.home.abbr == h.team ? g.home : g.away, &them = g.home.abbr == h.team ? g.away : g.home;
+        String res = g.id.length() ? String(us.score > them.score ? "W " : us.score < them.score ? "L " : "T ") +
+                                         String(us.score) + "-" + String(them.score)
+                                   : String("FINAL");
+        drawHighlight(h, res);
+        int r = pump(4000);
+        if (r) return r;
+      }
+      return 0;
+    }
+    case CARD_FPTS: {
+      FptsBoard b = fpts;
+      int r = 0;
+      uint32_t t0 = millis();
+      for (int f = 0; millis() - t0 < 4500; f++) {  // the matchup, then each side's players
+        drawFantasyTotals(b, f);
+        if ((r = pump(100))) return r;
+      }
+      for (int side = 0; side < 2; side++)
+        for (int p = 0; p < fantasyPages(b, side); p++) {
+          t0 = millis();
+          for (int f = 0; millis() - t0 < 3500; f++) {
+            drawFantasyPage(b, side, p, f);
+            r = pump(100);
+            if (r) return r;
+          }
+        }
+      return 0;
+    }
+    default: return -1;
+  }
+}
+
 static int showCardInner(const Card *c);
 
 static int showCard(const Card *c) {
@@ -878,9 +1204,10 @@ static int showCard(const Card *c) {
   if (isPortraitCard(k)) displaySetRotation(motion().present && motion().orient == 3 ? 3 : 1);
   else if (isAnyOrientCard(k)) displaySetRotation(0);
   else displaySetRotation(motionLandscapeRotation());
-  cardWantsTaps = (k == CARD_CRADLE || k == CARD_BEER);
+  cardWantsTaps = (k == CARD_CRADLE || k == CARD_BEER || k == CARD_LIFE);
   cardTapped = false;
-  int r = c ? showCard3(c) : -1;
+  int r = c ? showCard4(c) : -1;
+  if (r < 0 && c) r = showCard3(c);
   if (r < 0) r = showCardInner(c);
   cardWantsTaps = false;
   return r;
@@ -1116,13 +1443,78 @@ static void stopFocus() { focusOn = false; }
 
 static bool quietNow() { return CFG.quietAtNight && isNight(nowUtc()); }
 
+// The tap menu (double tap on any ordinary screen): tap = next entry, double tap (or the wheel press / BOOT hold) =
+// choose, 6 s of nothing = back to the screens. Entries are focus, games, favorites and clock.
+static int tapMenu() {
+  static const char *const items[] = {"FOCUS", "GAMES", "FAVS ONLY", "CLOCK"};
+  displaySetRotation(motionLandscapeRotation());
+  int sel = 0;
+  uint32_t last = millis();
+  while (millis() - last < 6000) {
+    drawTapMenu(sel, items, 4);
+    int r = pump(120);
+    if (r == 1) {
+      sel = (sel + 1) % 4;
+      last = millis();
+    } else if (r == 2 || r == 6) {
+      return sel;
+    } else if (r == 4 || r == 5) {
+      return -1;  // something else took over (phone page, turned, shaken)
+    }
+  }
+  return -1;
+}
+
+static void chooseClockFace() {
+  const char *const names[] = {"CLASSIC", "BIG DIGITS", "NIXIE", "WORDS", "TETRIS", "P: DIGITS", "P: ANALOG"};
+  const char *const styles[] = {"classic", "big", "nixie", "words", "tetris", "stacked", "analog"};
+  constexpr int count = sizeof styles / sizeof styles[0];
+  int sel = 0;
+  for (int i = 0; i < 5; i++)
+    if (CFG.clockStyle == styles[i]) sel = i;
+  uint32_t last = millis();
+  while (millis() - last < 10000) {
+    drawMessage(names[sel], "2 TAP=SET", 0xFFD16A);
+    int action = pump(120);
+    if (action == 1) {
+      sel = (sel + 1) % count;
+      last = millis();
+    } else if (action == 2 || action == 6) {
+      const bool portrait = sel >= 5;
+      if (portrait) CFG.portraitClockStyle = styles[sel];
+      else CFG.clockStyle = styles[sel];
+
+      JsonDocument config;
+      String json = readConfigText();
+      bool saved = !deserializeJson(config, json) && config.is<JsonObject>();
+      if (saved) {
+        config["clock"][portrait ? "portrait_style" : "style"] = styles[sel];
+        json = "";
+        serializeJson(config, json);
+        saved = writeConfigText(json);
+      }
+      drawMessage(names[sel], saved ? "SAVED" : "THIS BOOT", 0xFFD16A);
+      pump(800);
+      return;
+    } else if (action != 0) {
+      return;
+    }
+  }
+}
+
 static void runFocus() {
   time_t now = nowUtc();
   long remain = (long)(focusEnd - now);
-  drawFocus(remain, focusTotal, onBreak, now);
+  if (remain > 0 && motionPortrait()) {
+    displaySetRotation(motion().present && motion().orient == 3 ? 3 : 1);
+    drawPortraitFocus(remain, focusTotal, onBreak);
+    displaySetRotation(motionLandscapeRotation());
+  } else {
+    drawFocus(remain, focusTotal, onBreak, now);
+  }
   if (remain > 0) {
     int r = pump(1000);
-    if (r == 2) {
+    if (r == 2 || r == 6) {
       stopFocus();
       drawMessage(onBreak ? "BREAK" : "FOCUS", "stopped", 0x707070);
       pump(1200);
@@ -1186,6 +1578,7 @@ static void netTask(void *) {
         if (msPollLogin() == 1) {
           msLoginOk = true;
           nextCalendar = 0;
+          todoSetMicrosoft({});
         }
       }
       if (webCheckUpdate) {  // phone page button: check right away, before the (slower) data refresh
@@ -1200,6 +1593,7 @@ static void netTask(void *) {
 }
 
 void setup() {
+  netInitTls();
   dataMtx = xSemaphoreCreateRecursiveMutex();
   xSemaphoreTakeRecursive(dataMtx, portMAX_DELAY);  // the display loop owns the data except during pump()
   Serial.begin(115200);
@@ -1225,6 +1619,7 @@ void setup() {
     delay(1500);
   }
   soundReady = sdOk && soundBegin();
+  if (soundReady) micUse(false, CFG.clapControl);
   if (sdOk) {
     todoLoad();
     imagesScan();
@@ -1240,7 +1635,11 @@ void setup() {
   wm.setConfigPortalTimeout(300);
   wm.setAPCallback([](WiFiManager *) { drawMessage("JOIN WIFI:", "PixelPress", 0x20FF40); });
   drawMessage("WIFI...", "");
-  if (!wm.autoConnect("PixelPressbox-Setup")) ESP.restart();
+  // Every network the clock has joined is remembered: use whichever one is in range. If none is (or it's the
+  // first boot), WiFiManager tries the last one, then opens the "PixelPressbox-Setup" network to add a new one.
+  wifiLoad();
+  if (!wifiConnectSaved() && !wm.autoConnect("PixelPressbox-Setup")) ESP.restart();
+  wifiRemember(WiFi.SSID(), WiFi.psk());
 
   configTzTime(CFG.tz.c_str(), "pool.ntp.org", "time.nist.gov");
   drawMessage("SYNC", "clock...");
@@ -1328,7 +1727,7 @@ static void runGames(int start) {
   int frame = 0;
   while (true) {
     if (inMenu) {  // tilt left/right to choose, tap to play; idle 20 s = back to the cards
-      uint32_t idle = millis(), lastMove = 0;
+      uint32_t idle = millis(), menuOpened = idle, lastMove = 0;
       while (true) {
         int t = gameTick();
         if (t == 2) return;
@@ -1336,7 +1735,7 @@ static void runGames(int start) {
           sel = t - 10;
           break;
         }
-        if (t == 1) break;
+        if (t == 1 && millis() - menuOpened >= 400) break;
         if (tilt) {
           float r = readTilt(0, rotation).roll;
           if (fabsf(r) > 0.45f && millis() - lastMove > 450) {
@@ -1425,12 +1824,20 @@ void loop() {
   displaySetBrightness(flatSleeping ? 0 : isNight(now) ? CFG.nightBrightness : CFG.brightness);
   soundSetVolume(CFG.volume);
 
+  static uint32_t wifiLostAt = 0;
   if (WiFi.status() != WL_CONNECTED) {
     drawMessage("NO WIFI", "retrying", 0xFF2020);
-    WiFi.reconnect();
+    if (!wifiLostAt) wifiLostAt = millis();
+    if (millis() - wifiLostAt > 20000) {  // still gone: look for any of the other remembered networks
+      wifiLostAt = millis();
+      if (!wifiConnectSaved(10000)) WiFi.reconnect();
+    } else {
+      WiFi.reconnect();
+    }
     pump(3000);
     return;
   }
+  wifiLostAt = 0;
   displaySetRotation(motionLandscapeRotation());  // messages, focus, celebrations: landscape (or upside down)
   rebuild();  // cheap; keeps "IN 12M" style titles fresh. The rotator keeps its place.
   updateStatus();
@@ -1454,6 +1861,23 @@ void loop() {
     runGames(g == 99 ? -1 : g);
     motionTakeTap();
     orientKey = 0;  // re-check the orientation on the way out
+    return;
+  }
+  if (r == 6) {  // double tap: the tap menu (on its end it just starts the focus timer, as before)
+    int c = motionPortrait() ? 0 : tapMenu();
+    if (c == 0) {
+      startFocus(CFG.focusMinutes, false);
+    } else if (c == 1) {
+      runGames(-1);
+      motionTakeTap();
+      orientKey = 0;
+    } else if (c == 2) {
+      favOnly = !favOnly;
+      drawMessage(favOnly ? "FAVS ONLY" : "ALL GAMES", "", 0xFFC000);
+      pump(1000);
+    } else if (c == 3) {
+      chooseClockFace();
+    }
     return;
   }
   if (r == 2) {

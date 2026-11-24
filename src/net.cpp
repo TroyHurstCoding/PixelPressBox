@@ -2,6 +2,22 @@
 #include <HTTPClient.h>
 #include <NetworkClientSecure.h>
 #include <algorithm>
+#include <esp_heap_caps.h>
+#include <mbedtls/platform.h>
+
+static void *tlsCalloc(size_t count, size_t size) {
+  if (size && count > SIZE_MAX / size) return nullptr;
+  // TLS record buffers are large. Leave internal RAM available for Wi-Fi and display DMA.
+  if (count * size >= 4096) {
+    if (void *buffer = heap_caps_calloc(count, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))
+      return buffer;
+  }
+  return heap_caps_calloc(count, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+}
+
+void netInitTls() {
+  if (psramFound()) mbedtls_platform_set_calloc_free(tlsCalloc, heap_caps_free);
+}
 
 static void prep(NetworkClientSecure &client) {
   // Verify ESPN / Yahoo certificates against the root CA bundle built into the ESP32 core.
@@ -86,6 +102,11 @@ int httpPostFormJson(const String &url, const String &body, const String &authHe
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   if (authHeader.length()) http.addHeader("Authorization", authHeader);
   int code = http.POST(body);
+  if (code < 0) {
+    char detail[160] = {};
+    int tlsCode = client.lastError(detail, sizeof detail);
+    Serial.printf("[net] POST transport error %d, TLS %d %s\n", code, tlsCode, detail);
+  }
   if (code > 0) {
     size_t len = 0;
     char *resp = readBody(http, len);

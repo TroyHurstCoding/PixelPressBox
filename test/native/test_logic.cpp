@@ -16,6 +16,7 @@
 #include "../../src/feeds.h"
 #include "../../src/feeds2.h"
 #include "../../src/motion.h"
+#include "../../src/wifinet.h"
 #include "../../src/astro.h"
 
 Settings CFG;
@@ -473,11 +474,67 @@ static void test_batch3() {
   assert(gy > 0.99f && fabsf(gx) < 0.01f);
   bool flat = false;
   assert(classifyOrient(gx, gy, gz, 0, flat) == 0 && !flat);
+  {  // accelerometer flat on the back of the panel: sensor Y is up/down, Z is depth
+    float px, py, pz;
+    mapAxes(0, -256, 0, 1, 1, px, py, pz, true);   // standing upright
+    assert(py > 0.99f && fabsf(px) < 0.01f && fabsf(pz) < 0.01f);
+    mapAxes(0, 256, 0, 1, -1, px, py, pz, true);   // same, sensor mounted the other way up (sign found at power-up)
+    assert(py > 0.99f);
+    mapAxes(0, 0, -256, 1, 1, px, py, pz, true);   // lying on its back (screen up), chip side facing the back
+    bool pf = false;
+    classifyOrient(px, py, pz, 0, pf);
+    assert(pf && pz < -0.99f);
+    mapAxes(-256, 0, 0, 1, 1, px, py, pz, true);   // right edge down
+    assert(classifyOrient(px, py, pz, 0, pf) == 3);
+  }
   assert(classifyOrient(0.95f, 0.1f, 0.1f, 0, flat) == 3);    // right edge down
   assert(classifyOrient(-0.95f, 0.1f, 0.1f, 0, flat) == 1);   // left edge down
   assert(classifyOrient(0.0f, -0.98f, 0.1f, 0, flat) == 2);   // upside down
   assert(classifyOrient(0.6f, 0.6f, 0.2f, 3, flat) == 3);     // halfway: keep what we had
   assert(classifyOrient(0.05f, 0.1f, 0.99f, 1, flat) == 1 && flat);
+  {  // rotation: stays put until turned more than halfway (45 degrees + a little) toward the next orientation
+    bool fl = false;
+    auto at = [](float deg, float &x, float &y) { x = sinf(deg * 0.0174533f), y = cosf(deg * 0.0174533f); };
+    float x, y;
+    at(40, x, y);  assert(classifyOrient(x, y, 0, 0, fl) == 0 && !fl);   // 40 deg toward the right edge: still landscape
+    at(49, x, y);  assert(classifyOrient(x, y, 0, 0, fl) == 0);          // just past halfway: held (no flicker)
+    at(55, x, y);  assert(classifyOrient(x, y, 0, 0, fl) == 3);          // clearly past: right edge down
+    at(41, x, y);  assert(classifyOrient(x, y, 0, 3, fl) == 3);          // and it doesn't flip straight back
+    at(35, x, y);  assert(classifyOrient(x, y, 0, 3, fl) == 0);
+    at(-60, x, y); assert(classifyOrient(x, y, 0, 0, fl) == 1);
+    at(170, x, y); assert(classifyOrient(x, y, 0, 0, fl) == 2);
+    assert(classifyOrient(0.0f, 0.98f, 0.21f, 0, fl) == 0 && !fl);       // on the stand, leaning back
+    assert(classifyOrient(0.0f, 0.5f, 0.87f, 0, fl) == 0 && !fl);        // leaning 60 deg back: on, not "flat"
+    assert(classifyOrient(0.1f, 0.2f, 0.97f, 3, fl) == 3 && fl);         // really flat: keeps its orientation
+    // calibration from two poses, for both known mountings and an odd one
+    AxisMap m;
+    int16_t upP[3] = {5, -250, 50}, backP[3] = {3, 10, -255};            // panel mount, chip facing the back
+    assert(axisMapFromPoses(upP, backP, m));
+    AxisMap want = axisMapFor(true, 1, 1);
+    for (int i = 0; i < 3; i++) assert(m.axis[i] == want.axis[i] && m.sign[i] == want.sign[i]);
+    int16_t upF[3] = {0, 20, -255}, backF[3] = {0, 250, 10};             // under the fin, chip down
+    assert(axisMapFromPoses(upF, backF, m));
+    want = axisMapFor(false, 1, 1);
+    for (int i = 0; i < 3; i++) assert(m.axis[i] == want.axis[i] && m.sign[i] == want.sign[i]);
+    int16_t upX[3] = {255, 0, 0}, backX[3] = {0, 0, 255};                // sensor turned a quarter turn on the panel
+    assert(axisMapFromPoses(upX, backX, m));
+    float gx, gy, gz;
+    applyAxisMap(m, 255, 0, 0, gx, gy, gz);
+    assert(gy > 0.99f && classifyOrient(gx, gy, gz, 2, fl) == 0 && !fl);
+    applyAxisMap(m, 0, 0, 255, gx, gy, gz);
+    classifyOrient(gx, gy, gz, 0, fl);
+    assert(fl && gz < -0.99f);
+    assert(m.axis[0] == 1 && (m.sign[0] == 1 || m.sign[0] == -1));
+    int16_t tilted[3] = {180, 180, 0};
+    assert(!axisMapFromPoses(tilted, backX, m) && !axisMapFromPoses(upX, upX, m));
+  }
+  {  // remembered WiFi networks: only the ones in range, strongest first
+    std::vector<String> saved = {"Home", "Office", "Cabin"}, seen = {"Neighbor", "Office", "Home", "Home"};
+    std::vector<int> rssi = {-40, -55, -80, -70};
+    std::vector<int> order = wifiTryOrder(saved, seen, rssi);
+    assert(order.size() == 2 && order[0] == 1 && order[1] == 0);   // Office (-55), then Home (best of -80/-70)
+    assert(wifiTryOrder(saved, {"Neighbor"}, {-40}).empty());
+  }
   // OpenTDB url3986 text
   assert(urlDecode("Who%20painted%20%22The%20Starry%20Night%22%3F") == "Who painted \"The Starry Night\"?");
   // Billboard: Thu 2026-11-12 -> 20 years back is Sun 2006-11-12 -> its chart is dated Sat 2006-11-11

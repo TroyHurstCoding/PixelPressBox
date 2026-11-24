@@ -4,8 +4,10 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 
 ## Order
 1. `fit_test.stl` (about 30 min): the shell's front 10 mm. Press the panel in: it should slide in with a hair of play.
-2. `shell.stl`, front edge down, no supports. PETG if you'll snap it open often; PLA is fine for occasional opening.
+2. `shell.stl`, front edge down, no supports. PETG if you'll snap it open often or run the panel bright for hours
+   (the walls are closed, so it runs warm); PLA is fine for occasional opening and normal brightness.
 3. `lid.stl` (back cover), outside face down, no supports. Measure the power cable first and set `CABLE_D`.
+   The cable snaps into the slot in the bottom right corner (seen from the front), beside the stand.
 4. `stand.stl`, as exported.
 
 ## Settings
@@ -36,5 +38,5 @@ Works in Cura or Creality Print. Matte black PLA hides layer lines best.
 - The back cover snaps into the shell: no screws.
 - 4x M3x35 button head: back cover's columns into the panel's threaded corner holes.
 - 4x M2.5x8: board onto the standoffs. They cut their own threads.
-- 2x M3x6: accelerometer under the fin on the back cover. They cut their own threads.
+- The accelerometer goes on one of the LED panel's own screws (top middle), flat against the panel.
 - Drive the self-cutting screws slowly the first time and don't overtighten.

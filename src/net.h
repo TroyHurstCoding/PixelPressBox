@@ -6,6 +6,9 @@
 // ESPN/Yahoo JSON nests ~15 levels deep; ArduinoJson's default limit (10) is too low.
 constexpr uint8_t JSON_NESTING = 40;
 
+// Set the TLS allocator before network clients start.
+void netInitTls();
+
 // GET url and deserialize into doc using an optional filter. Returns HTTP code (200 = ok).
 int httpGetJson(const String &url, JsonDocument &doc, const JsonDocument *filter = nullptr,
                 const char *bearer = nullptr);

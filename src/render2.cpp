@@ -175,7 +175,7 @@ void drawAquarium(int frame) {
 }
 
 // =============================================================== double pendulum
-static double dpT1, dpT2, dpW1, dpW2;
+static float dpT1, dpT2, dpW1, dpW2;
 struct TrailPt {
   int8_t x, y;
 };
@@ -183,33 +183,33 @@ static TrailPt dpTrail[90];
 static int dpTrailN = 0, dpTrailHead = 0;
 static int dpSince = 0;
 
-static void dpDeriv(double t1, double t2, double w1, double w2, double &a1, double &a2) {
-  const double g = 9.81, m1 = 1, m2 = 1, L1 = 1, L2 = 1;
-  double d = t1 - t2, den = 2 * m1 + m2 - m2 * cos(2 * t1 - 2 * t2);
-  a1 = (-g * (2 * m1 + m2) * sin(t1) - m2 * g * sin(t1 - 2 * t2) - 2 * sin(d) * m2 * (w2 * w2 * L2 + w1 * w1 * L1 * cos(d))) /
+static void dpDeriv(float t1, float t2, float w1, float w2, float &a1, float &a2) {
+  const float g = 9.81f, m1 = 1, m2 = 1, L1 = 1, L2 = 1;
+  float d = t1 - t2, den = 2 * m1 + m2 - m2 * cosf(2 * t1 - 2 * t2);
+  a1 = (-g * (2 * m1 + m2) * sinf(t1) - m2 * g * sinf(t1 - 2 * t2) - 2 * sinf(d) * m2 * (w2 * w2 * L2 + w1 * w1 * L1 * cosf(d))) /
        (L1 * den);
-  a2 = (2 * sin(d) * (w1 * w1 * L1 * (m1 + m2) + g * (m1 + m2) * cos(t1) + w2 * w2 * L2 * m2 * cos(d))) / (L2 * den);
+  a2 = (2 * sinf(d) * (w1 * w1 * L1 * (m1 + m2) + g * (m1 + m2) * cosf(t1) + w2 * w2 * L2 * m2 * cosf(d))) / (L2 * den);
 }
 
 void drawDoublePendulum(int frame, bool restart) {
   if (restart || dpSince > 30 * 25) {
-    dpT1 = (100 + frand() * 70) * M_PI / 180 * (rnd32() & 1 ? 1 : -1);
-    dpT2 = (100 + frand() * 70) * M_PI / 180;
+    dpT1 = (100 + frand() * 70) * (float)M_PI / 180 * (rnd32() & 1 ? 1 : -1);
+    dpT2 = (100 + frand() * 70) * (float)M_PI / 180;
     dpW1 = dpW2 = 0;
     dpTrailN = dpTrailHead = 0;
     dpSince = 0;
   }
   dpSince++;
-  const double dt = 1.0 / 30 / 4;
+  const float dt = 1.0f / 30 / 4;
   for (int k = 0; k < 4; k++) {  // RK4
-    double a1, a2, b1, b2, c1, c2, e1, e2;
+    float a1, a2, b1, b2, c1, c2, e1, e2;
     dpDeriv(dpT1, dpT2, dpW1, dpW2, a1, a2);
     dpDeriv(dpT1 + dpW1 * dt / 2, dpT2 + dpW2 * dt / 2, dpW1 + a1 * dt / 2, dpW2 + a2 * dt / 2, b1, b2);
-    double w1b = dpW1 + a1 * dt / 2, w2b = dpW2 + a2 * dt / 2;
+    float w1b = dpW1 + a1 * dt / 2, w2b = dpW2 + a2 * dt / 2;
     dpDeriv(dpT1 + w1b * dt / 2, dpT2 + w2b * dt / 2, dpW1 + b1 * dt / 2, dpW2 + b2 * dt / 2, c1, c2);
-    double w1c = dpW1 + b1 * dt / 2, w2c = dpW2 + b2 * dt / 2;
+    float w1c = dpW1 + b1 * dt / 2, w2c = dpW2 + b2 * dt / 2;
     dpDeriv(dpT1 + w1c * dt, dpT2 + w2c * dt, dpW1 + c1 * dt, dpW2 + c2 * dt, e1, e2);
-    double w1d = dpW1 + c1 * dt, w2d = dpW2 + c2 * dt;
+    float w1d = dpW1 + c1 * dt, w2d = dpW2 + c2 * dt;
     dpT1 += dt / 6 * (dpW1 + 2 * w1b + 2 * w1c + w1d);
     dpT2 += dt / 6 * (dpW2 + 2 * w2b + 2 * w2c + w2d);
     dpW1 += dt / 6 * (a1 + 2 * b1 + 2 * c1 + e1);
@@ -474,10 +474,40 @@ void drawPortraitClock(time_t now) {
   localtime_r(&now, &t);
   int h = CFG.twelveHour ? (t.tm_hour % 12 == 0 ? 12 : t.tm_hour % 12) : t.tm_hour;
   gfxBegin();
+  if (CFG.portraitClockStyle == "analog") {
+    constexpr float turn = 2.0f * (float)M_PI;
+    for (int tick = 0; tick < 12; tick++) {
+      float angle = tick * turn / 12;
+      px(16 + lroundf(14 * sinf(angle)), 20 - lroundf(14 * cosf(angle)), 0x8493A0);
+    }
+    float hour = (t.tm_hour % 12 + t.tm_min / 60.0f) * turn / 12;
+    float minute = t.tm_min * turn / 60;
+    line(16, 20, 16 + lroundf(8 * sinf(hour)), 20 - lroundf(8 * cosf(hour)), 0xFFFFFF);
+    line(16, 20, 16 + lroundf(12 * sinf(minute)), 20 - lroundf(12 * cosf(minute)), 0xFFB020);
+    char label[6];
+    snprintf(label, sizeof label, "%02d:%02d", h, t.tm_min);
+    txt(label, 1, 46, 0xCED7DF);
+    gfxEnd();
+    return;
+  }
   if (h >= 10 || !CFG.twelveHour) bigDigit(2, 0, h / 10, 0xFFFFFF);
   bigDigit(17, 0, h % 10, 0xFFFFFF);
   bigDigit(2, 32, t.tm_min / 10, 0xFFB020);
   bigDigit(17, 32, t.tm_min % 10, 0xFFB020);
+  gfxEnd();
+}
+
+void drawPortraitFocus(long remain, long total, bool onBreak) {
+  remain = std::max(0L, remain);
+  const uint32_t color = onBreak ? 0x82BC77 : 0xFFB020;
+  gfxBegin();
+  txt(onBreak ? "BREAK" : "FOCUS", 1, 5, color);
+  char label[16];
+  snprintf(label, sizeof label, "%ld:%02ld", remain / 60, remain % 60);
+  String timer(label);
+  txt(timer, std::max(0, (32 - (int)timer.length() * 6) / 2), 27, 0xFFFFFF);
+  int height = total > 0 ? (int)(14 * std::min(remain, total) / total) : 0;
+  if (height) gfxPanel()->fillRect(13, 54 - height, 6, height, gfxColor(color));
   gfxEnd();
 }
 
@@ -639,14 +669,18 @@ void drawIssMap(const IssFix &f, time_t now, float homeLat, float homeLon, int f
   sunSubpoint(now, sLat, sLon);
   const double R = M_PI / 180;
   double sinS = sin(sLat * R), cosS = cos(sLat * R);
+  double sunLongitude[64];
+  for (int x = 0; x < 64; x++) {
+    double lon = -180 + (x + 0.5) * 360 / 64;
+    sunLongitude[x] = cos((lon - sLon) * R);
+  }
   gfxBegin();
   for (int y = 0; y < 32; y++) {
     double lat = 90 - (y + 0.5) * 180 / 32;
     double sl = sin(lat * R), cl = cos(lat * R);
     uint64_t row = WORLD_LAND[y];
     for (int x = 0; x < 64; x++) {
-      double lon = -180 + (x + 0.5) * 360 / 64;
-      double cz = sl * sinS + cl * cosS * cos((lon - sLon) * R);  // sine of the sun's altitude
+      double cz = sl * sinS + cl * cosS * sunLongitude[x];  // sine of the sun's altitude
       float day = std::max(0.0, std::min(1.0, (cz + 0.1) / 0.2));  // soft twilight band
       bool land = (row >> (63 - x)) & 1;
       uint32_t c = land ? mix(0x0C2A12, 0x3C9A3C, day) : mix(0x040C24, 0x1350A8, day);

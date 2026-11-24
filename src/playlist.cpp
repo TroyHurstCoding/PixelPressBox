@@ -142,6 +142,19 @@ String cardLabel(const Card &c) {
     case CARD_NATDAY: return "National day";
     case CARD_SURF: return "Surf report";
     case CARD_HN: return "Hacker News";
+    case CARD_BINARY: return "Binary clock";
+    case CARD_SUNARC: return "Sun-arc clock";
+    case CARD_CITY: return "City clock";
+    case CARD_WORLD: return "World clock";
+    case CARD_SAND: return "Sand clock";
+    case CARD_WINPROB: return "Win probability: " + c.title;
+    case CARD_GOLF: return "Golf leaderboard";
+    case CARD_NEXTGAME: return "Next game: " + c.title;
+    case CARD_HIGHLIGHT: return "Top performer: " + c.title;
+    case CARD_FPTS: return "Fantasy points";
+    case CARD_VISUALIZER: return "Sound visualizer";
+    case CARD_LIFE: return "Game of Life";
+    case CARD_FLIGHTS: return "Planes overhead";
   }
   return c.key;
 }

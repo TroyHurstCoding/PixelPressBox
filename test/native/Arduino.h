@@ -42,6 +42,11 @@ class String {
   int indexOf(const String &x) const { auto p = s.find(x.s); return p == std::string::npos ? -1 : (int)p; }
   int indexOf(char c, int from) const { auto p = s.find(c, from); return p == std::string::npos ? -1 : (int)p; }
   int lastIndexOf(char c) const { auto p = s.rfind(c); return p == std::string::npos ? -1 : (int)p; }
+  int lastIndexOf(char c, int from) const { if (from < 0) return -1; auto p = s.rfind(c, from); return p == std::string::npos ? -1 : (int)p; }
+  int lastIndexOf(const String &x) const { auto p = s.rfind(x.s); return p == std::string::npos ? -1 : (int)p; }
+  int indexOf(const String &x, int from) const { auto p = s.find(x.s, from); return p == std::string::npos ? -1 : (int)p; }
+  void remove(unsigned idx) { if (idx < s.size()) s.erase(idx); }
+  void remove(unsigned idx, unsigned n) { if (idx < s.size()) s.erase(idx, n); }
   bool startsWith(const String &x) const { return s.rfind(x.s, 0) == 0; }
   bool endsWith(const String &x) const {
     return s.size() >= x.s.size() && s.compare(s.size() - x.s.size(), x.s.size(), x.s) == 0;

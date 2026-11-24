@@ -4,6 +4,7 @@
 #include <vector>
 
 void todoLoad();
+void todoSetMicrosoft(std::vector<String> tasks);
 std::vector<String> todoOpen();   // texts of items not yet done
 String todoJson();                // [{"t":"Call Sam","d":false},...] for the phone page
 bool todoAdd(const String &text);

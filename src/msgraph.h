@@ -15,6 +15,10 @@ String msStatus();     // one line for the phone page
 void msSignOut();
 
 bool msFetchCalendar(time_t now, std::vector<Meeting> &out);  // from 1 hour ago to 24 hours ahead
+// Capture and validate the token under the caller's data lock. Task requests run outside it.
+String msTaskToken();
+bool msTaskTokenCurrent(const String &token);
+bool msFetchTasks(const String &token, std::vector<String> &out);
 bool msFetchFlagged(std::vector<String> &out);                // subjects of flagged emails
 // Teams presence: availability (Available, Busy, DoNotDisturb, BeRightBack, Away, Offline...)
 // and activity (InACall, InAMeeting, Presenting...). Needs the Presence.Read permission.

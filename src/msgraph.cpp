@@ -3,7 +3,11 @@
 #include "desk.h"
 #include "net.h"
 
-static const char *SCOPES = "offline_access%20Calendars.Read%20Mail.ReadBasic%20Presence.Read";
+static String scopes() {
+  String result = "offline_access%20Calendars.Read%20Mail.ReadBasic%20Presence.Read";
+  if (CFG.msTodo) result += "%20Tasks.Read";
+  return result;
+}
 static String accessToken, userCode, verifyUrl, deviceCode, lastError;
 static time_t accessExpires = 0;
 static uint32_t loginDeadline = 0, nextPollAt = 0, pollEvery = 5000;
@@ -49,9 +53,18 @@ void msSignOut() {
 bool msStartLogin() {
   if (!msConfigured()) return false;
   JsonDocument d;
-  int code = httpPostFormJson(authority() + "devicecode", "client_id=" + CFG.msClientId + "&scope=" + SCOPES, "", d);
+  int code = httpPostFormJson(authority() + "devicecode", "client_id=" + CFG.msClientId + "&scope=" + scopes(), "", d);
   if (code != 200 || !d["user_code"].is<const char *>()) {
-    lastError = d["error"] | "device code request failed";
+    lastError = d["error"] | "";
+    if (!lastError.length()) {
+      if (code == -2) lastError = "Microsoft response was not valid JSON";
+      else if (code == -3) lastError = "Microsoft response could not be read";
+      else if (code < 0) lastError = "Could not connect to Microsoft";
+      else lastError = "Microsoft did not return a device code";
+    }
+    lastError += " (" + String(code < 0 ? "network " : "HTTP ") + String(code) + ")";
+    long aadsts = d["error_codes"][0] | 0L;
+    if (aadsts > 0) lastError += " AADSTS" + String(aadsts);
     Serial.printf("[ms] devicecode %d %s\n", code, lastError.c_str());
     return false;
   }
@@ -109,7 +122,7 @@ static bool ensureToken() {
   if (!rt.length()) return false;
   JsonDocument d;
   int code = httpPostFormJson(authority() + "token",
-                              "grant_type=refresh_token&client_id=" + CFG.msClientId + "&scope=" + SCOPES +
+                              "grant_type=refresh_token&client_id=" + CFG.msClientId + "&scope=" + scopes() +
                                   "&refresh_token=" + urlEncode(rt),
                               "", d);
   if (takeTokens(d)) return true;
@@ -170,6 +183,67 @@ bool msFetchFlagged(std::vector<String> &out) {
   if (code != 200) return false;
   out.clear();
   for (JsonObjectConst m : d["value"].as<JsonArrayConst>()) out.push_back(m["subject"] | "(no subject)");
+  return true;
+}
+
+String msTaskToken() { return CFG.msTodo && ensureToken() ? accessToken : String(); }
+bool msTaskTokenCurrent(const String &token) { return accessToken == token; }
+
+bool msFetchTasks(const String &token, std::vector<String> &out) {
+  static const char *BASE = "https://graph.microsoft.com/v1.0/me/todo/lists";
+  constexpr size_t maxLists = 8;
+  constexpr size_t maxTasks = 30;
+  constexpr int maxPages = 4;
+
+  JsonDocument filter;
+  filter["@odata.nextLink"] = true;
+  filter["value"][0]["id"] = true;
+  std::vector<String> lists;
+  String url = String(BASE) + "?$select=id&$top=20";
+  for (int page = 0; page < maxPages && url.length() && lists.size() < maxLists; page++) {
+    if (!url.startsWith(String(BASE) + "?")) return false;
+    JsonDocument d;
+    int code = httpGetJson(url, d, &filter, token.c_str());
+    if (code != 200 || !d["value"].is<JsonArrayConst>()) {
+      Serial.printf("[ms] To Do lists failed (%d)\n", code);
+      return false;
+    }
+    for (JsonObjectConst list : d["value"].as<JsonArrayConst>()) {
+      const char *id = list["id"] | "";
+      if (*id) lists.emplace_back(id);
+      if (lists.size() >= maxLists) break;
+    }
+    url = d["@odata.nextLink"] | "";
+  }
+
+  filter.clear();
+  filter["@odata.nextLink"] = true;
+  filter["value"][0]["title"] = true;
+  filter["value"][0]["status"] = true;
+  std::vector<String> tasks;
+  for (const String &id : lists) {
+    String endpoint = String(BASE) + "/" + urlEncode(id) + "/tasks?";
+    url = endpoint + "$select=title,status&$top=30";
+    for (int page = 0; page < maxPages && url.length() && tasks.size() < maxTasks; page++) {
+      if (!url.startsWith(endpoint)) return false;
+      JsonDocument d;
+      int code = httpGetJson(url, d, &filter, token.c_str());
+      if (code != 200 || !d["value"].is<JsonArrayConst>()) {
+        Serial.printf("[ms] To Do tasks failed (%d)\n", code);
+        return false;
+      }
+      for (JsonObjectConst task : d["value"].as<JsonArrayConst>()) {
+        String status = task["status"] | "";
+        String title = task["title"] | "";
+        title.trim();
+        if (status.length() && status != "completed" && title.length()) tasks.push_back(title.substring(0, 80));
+        if (tasks.size() >= maxTasks) break;
+      }
+      url = d["@odata.nextLink"] | "";
+    }
+    if (tasks.size() >= maxTasks) break;
+  }
+  out = std::move(tasks);
   return true;
 }
 

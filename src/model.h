@@ -32,6 +32,10 @@ struct Game {
   int outs = 0;         // MLB
   int balls = 0, strikes = 0;
   bool on1 = false, on2 = false, on3 = false;
+  // pre-game extras (scoreboard)
+  String tv;            // "CBS"
+  String line;          // "KC -3.5"
+  String overUnder;     // "47.5"
 
   String key() const { return league + ":" + id; }
 };
@@ -105,6 +109,70 @@ struct GameResult {
   time_t when = 0;                 // game start (UTC)
 };
 
+// ---- batch 4 data
+// win probability line for one game (ESPN summary), home team's chance 0-100 per play
+struct WinProb {
+  bool ok = false;
+  String gameKey;
+  Game game;                       // snapshot for teams/colors/status
+  std::vector<uint8_t> home;
+};
+// a team's top performers after a game (ESPN summary "leaders")
+struct Highlight {
+  String gameKey, team, who, what; // "BUF", "J. ALLEN", "304 YDS 1 TD"
+  uint32_t color = 0xFFFFFF;
+};
+struct GolfRow {
+  String pos, name, score;         // "T2", "S. SCHEFFLER", "-12"
+};
+struct GolfBoard {
+  bool ok = false;
+  String event, detail;            // "THE RSM CLASSIC", "Round 3 - In Progress"
+  char state = 'p';
+  time_t start = 0;
+  std::vector<GolfRow> rows;       // top 10, leaderboard order
+};
+// a favorite team's next game (ESPN team schedule, plus the scoreboard's line when it has one)
+struct NextGame {
+  bool ok = false;
+  String league, id, us, them, tv, line, overUnder;
+  bool home = false;
+  time_t start = 0;
+  uint32_t usColor = 0xFFFFFF, themColor = 0xA0A0A0;
+};
+struct Flight {
+  String callsign;
+  int altFt = 0, speedKt = 0, heading = 0, climbFpm = 0;
+  float distKm = 0, bearing = 0;   // from home
+};
+
+// fantasy points (NFL): players chosen on the phone page, scored with the league's own rules
+struct FptsPlayer {
+  String id, name, pos, team;      // id = ESPN athlete id; a team defence has pos "DST" and id ""
+  int side = 0;                    // 0 = my team, 1 = opponent
+};
+struct FptsLine {                  // one player's week so far
+  String name, pos, team, stats;   // stats: "21/30 254yd 2TD"
+  float pts = 0;
+  char state = 'n';                // 'p' pre, 'i' live, 'f' final, 'n' no game (bye)
+  bool hasBall = false;            // live and on the field (offense with the ball, or a defence without it)
+  int side = 0;
+};
+struct FptsBoard {
+  bool ok = false;
+  String meLabel, oppLabel;
+  float me = 0, opp = 0;
+  bool anyLive = false, anyStarted = false;
+  int week = 0;
+  std::vector<FptsLine> lines;
+};
+
+struct WorldCity {
+  String name;                     // "LON"
+  int utcMin = 0;                  // standard time offset from UTC in minutes
+  String dst;                      // "us" | "eu" | "au" | "" (none)
+};
+
 struct Countdown {
   String name;
   int year = 0, month = 0, day = 0;  // local date; year 0 = every year (birthdays, anniversaries)
@@ -147,6 +215,7 @@ struct Settings {
   // Outlook / Microsoft 365 (device-code sign-in from the phone page)
   String msClientId, msTenant = "organizations";
   bool msFlaggedMail = true;
+  bool msTodo = false;
   int pollCalendar = 180;
   int chimeMinutes = 2;                    // meeting chime this many minutes before start (0 = off)
   int meetingSoonMinutes = 60;             // clock shows "MTG 12M" when a meeting is this close
@@ -168,6 +237,7 @@ struct Settings {
   String rainWord;                         // word hidden in the digital rain ("" = none)
   bool cardFire = true, cardBounce = true, cardSnake = true, cardBreakout = true, cardImages = true;
   String bounceText = "PIXEL";             // the bouncing logo's text
+  String portraitClockStyle = "stacked";
   String clockStyle = "classic";           // main clock: classic | big | nixie | words | tetris
   bool cardNixie = true, cardBigClock = true, cardWordClock = true;  // extra clock styles in the rotation
   bool historyGentle = true;               // skip "on this day" items about deaths and disasters
@@ -181,12 +251,31 @@ struct Settings {
   bool cardTrivia = true, cardFacts = true, cardBillboard = true, cardFlyW = true;
   bool cardIss = true, cardPlanets = true, cardNationalDay = true, cardSurf = true, cardHackerNews = true;
   std::vector<int> billboardYears{20, 30, 40};  // "this week N years ago"
+  // batch 4 screens
+  bool cardBinary = true, cardSunArc = true, cardCity = true, cardWorld = true, cardSand = true;
+  bool cardWinProb = true, cardGolf = true, cardNextGame = true, cardHighlights = true;
+  bool cardVisualizer = true, cardLife = true, cardFlights = true, cardFpts = true;
+  bool clapControl = false;                // two claps = next screen (needs the microphones)
+  uint8_t micGain = 0x1A;                  // ES7210 PGA gain register (0x16 low .. 0x1C very high)
+  std::vector<WorldCity> worldClocks{{"LA", -480, "us"}, {"NYC", -300, "us"}, {"LON", 0, "eu"}, {"TOKYO", 540, ""}};
+  int flightRadiusKm = 40;
+  String golfTour = "pga";
+  // fantasy points
+  String fptsMe = "MY TEAM", fptsOpp = "OPPONENT";
+  int fptsWeek = 0;                        // 0 = this week
+  std::vector<FptsPlayer> fptsPlayers;
+  std::vector<std::pair<String, float>> fptsRules;     // e.g. ("passTD", 5); see fantasy.cpp for the defaults
+  std::vector<std::pair<int, float>> fptsDstTiers;     // (max points allowed, fantasy points), first match wins
   String surfName = "VENICE";
   float surfLat = 33.985f, surfLon = -118.475f;  // Venice Breakwater
   // accelerometer (ADXL345): orientation auto | landscape | portrait; mirror flips which way portrait turns;
   // tap = next card, double tap = focus timer, lying flat = screen off
   String orientation = "auto";
   bool accelMirror = false, accelTaps = true, flatSleep = true;
+  String accelMount = "panel";             // where the accelerometer sits: "panel" (flat on the back of the LED
+                                           // panel, pins along the lower edge) | "fin" (the earlier spot, chip-down
+                                           // under a fin on the back cover)
+  String tapForce = "light";               // how hard a tap must be: "verylight" | "light" | "firm" (the original)
   bool pitchInvert = false;                // games: flip "lean back" if it comes out backwards
 
 
@@ -214,6 +303,7 @@ struct Settings {
   String panelDriver = "SHIFTREG";         // SHIFTREG | FM6126A | ICN2038S | FM6124 | MBI5124
   bool swapGreenBlue = false;              // Adafruit #5036 panels need true
   bool clkPhase = false;
+  bool panelFlip = false;                  // the LED panel is installed the other way up: turn every picture half a turn
 
   // sound
   bool soundOn = true;

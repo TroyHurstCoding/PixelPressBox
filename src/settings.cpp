@@ -1,5 +1,6 @@
 #include "settings.h"
 #include <ArduinoJson.h>
+#include <cmath>
 #include <SD.h>
 #include <SPI.h>
 #include "board.h"
@@ -75,6 +76,7 @@ bool loadSettings(const char *path) {
   c.panelDriver = d["panel"]["driver"] | c.panelDriver.c_str();
   c.swapGreenBlue = d["panel"]["swap_green_blue"] | c.swapGreenBlue;
   c.clkPhase = d["panel"]["clk_phase"] | c.clkPhase;
+  c.panelFlip = d["panel"]["flip"] | c.panelFlip;
 
   c.soundOn = d["sound"]["enabled"] | c.soundOn;
   c.volume = d["sound"]["volume"] | c.volume;
@@ -93,6 +95,10 @@ bool loadSettings(const char *path) {
   JsonObjectConst o = d["outlook"];
   c.msClientId = o["client_id"] | "";
   c.msTenant = o["tenant"] | c.msTenant.c_str();
+  c.msClientId.trim();
+  c.msTenant.trim();
+  if (!c.msTenant.length()) c.msTenant = "organizations";
+  c.msTodo = o["sync_tasks"] | c.msTodo;
   c.msFlaggedMail = o["flagged_email"] | c.msFlaggedMail;
   c.chimeMinutes = o["chime_minutes"] | c.chimeMinutes;
   c.meetingSoonMinutes = o["soon_minutes"] | c.meetingSoonMinutes;
@@ -146,6 +152,7 @@ bool loadSettings(const char *path) {
   c.cardNixie = cards["nixie_clock"] | c.cardNixie;
   c.cardBigClock = cards["big_clock"] | c.cardBigClock;
   c.cardWordClock = cards["word_clock"] | c.cardWordClock;
+  c.portraitClockStyle = d["clock"]["portrait_style"] | c.portraitClockStyle.c_str();
   c.clockStyle = d["clock"]["style"] | c.clockStyle.c_str();
   c.historyGentle = cards["on_this_day_gentle"] | c.historyGentle;
   c.teamsPresence = d["outlook"]["teams_presence"] | c.teamsPresence;
@@ -170,6 +177,59 @@ bool loadSettings(const char *path) {
   c.cardNationalDay = cards["national_day"] | c.cardNationalDay;
   c.cardSurf = cards["surf"] | c.cardSurf;
   c.cardHackerNews = cards["hacker_news"] | c.cardHackerNews;
+  // batch 4
+  c.cardBinary = cards["binary_clock"] | c.cardBinary;
+  c.cardSunArc = cards["sun_clock"] | c.cardSunArc;
+  c.cardCity = cards["city_clock"] | c.cardCity;
+  c.cardWorld = cards["world_clock"] | c.cardWorld;
+  c.cardSand = cards["sand_clock"] | c.cardSand;
+  c.cardWinProb = cards["win_probability"] | c.cardWinProb;
+  c.cardGolf = cards["golf"] | c.cardGolf;
+  c.cardNextGame = cards["next_game"] | c.cardNextGame;
+  c.cardHighlights = cards["top_performers"] | c.cardHighlights;
+  c.cardVisualizer = cards["visualizer"] | c.cardVisualizer;
+  c.cardLife = cards["game_of_life"] | c.cardLife;
+  c.cardFlights = cards["planes"] | c.cardFlights;
+  c.cardFpts = cards["fantasy_points"] | c.cardFpts;
+  if (d["world_clocks"].is<JsonArrayConst>()) {
+    c.worldClocks.clear();
+    for (JsonObjectConst w : d["world_clocks"].as<JsonArrayConst>()) {
+      WorldCity wc;
+      wc.name = w["name"] | "";
+      wc.utcMin = (int)lroundf((w["utc"] | 0.0f) * 60);
+      wc.dst = w["dst"] | "";
+      wc.dst.toLowerCase();
+      if (wc.name.length()) c.worldClocks.push_back(wc);
+    }
+  }
+  c.clapControl = d["mic"]["clap_control"] | c.clapControl;
+  String sens = d["mic"]["sensitivity"] | "high";
+  c.micGain = sens == "low" ? 0x16 : sens == "medium" ? 0x18 : sens == "max" ? 0x1C : 0x1A;
+  c.flightRadiusKm = d["planes"]["radius_km"] | c.flightRadiusKm;
+  c.golfTour = d["golf"]["tour"] | c.golfTour.c_str();
+  JsonObjectConst fp = d["fantasy_points"];
+  c.fptsMe = fp["me"] | c.fptsMe.c_str();
+  c.fptsOpp = fp["opp"] | c.fptsOpp.c_str();
+  c.fptsWeek = fp["week"] | 0;
+  c.fptsPlayers.clear();
+  for (JsonObjectConst pl : fp["players"].as<JsonArrayConst>()) {
+    FptsPlayer x;
+    x.id = pl["id"] | "";
+    x.name = pl["name"] | "";
+    x.pos = pl["pos"] | "";
+    x.pos.toUpperCase();
+    if (x.pos == "DEF" || x.pos == "D/ST" || x.pos == "D") x.pos = "DST";
+    x.team = pl["team"] | "";
+    x.team.toUpperCase();
+    x.side = String(pl["side"] | "me") == "opp" ? 1 : 0;
+    if (x.name.length() && x.team.length()) c.fptsPlayers.push_back(x);
+  }
+  c.fptsRules.clear();
+  for (JsonPairConst kv : fp["scoring"].as<JsonObjectConst>())
+    if (kv.value().is<float>() || kv.value().is<int>()) c.fptsRules.push_back({kv.key().c_str(), kv.value().as<float>()});
+  c.fptsDstTiers.clear();
+  for (JsonArrayConst t : fp["dst_points_allowed"].as<JsonArrayConst>())
+    if (t.size() == 2) c.fptsDstTiers.push_back({t[0].as<int>(), t[1].as<float>()});
   if (d["billboard_years"].is<JsonArrayConst>()) {
     c.billboardYears.clear();
     for (JsonVariantConst y : d["billboard_years"].as<JsonArrayConst>()) c.billboardYears.push_back(y.as<int>());
@@ -180,7 +240,9 @@ bool loadSettings(const char *path) {
   c.surfLon = d["surf"]["lon"] | c.surfLon;
   c.orientation = d["motion"]["orientation"] | c.orientation.c_str();
   c.accelMirror = d["motion"]["mirror"] | c.accelMirror;
+  c.accelMount = d["motion"]["mount"] | c.accelMount.c_str();
   c.accelTaps = d["motion"]["taps"] | c.accelTaps;
+  c.tapForce = d["motion"]["tap_force"] | c.tapForce.c_str();
   c.flatSleep = d["motion"]["flat_sleep"] | c.flatSleep;
   c.pitchInvert = d["motion"]["pitch_invert"] | c.pitchInvert;
   c.ufc = d["ufc"]["show"] | c.ufc;

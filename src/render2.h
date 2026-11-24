@@ -13,6 +13,7 @@ void drawWater(int frame, float gx, float gy, bool accel, bool restart);
 // portrait (32 wide x 64 tall; the caller sets the panel rotation)
 void drawBeer(int frame, float gx, float gy, bool accel, bool tap, bool restart);
 void drawPortraitClock(time_t now);
+void drawPortraitFocus(long remain, long total, bool onBreak);
 void drawHourglass(int frame, float gy, bool accel, bool restart);
 void drawLava(int frame, bool restart);
 
