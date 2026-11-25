@@ -93,3 +93,10 @@ save("win", mix(seq([note(C5, .2), note(E5, .2), note(G5, .2), note(C6, .9)], ga
 # desk clock: soft two-tone chime before a meeting, rising three-note bell when a focus timer ends
 save("chime", seq([note(G5, .35, "bell", .45), note(E5, .7, "bell", .45)], gap=0.05))
 save("focus", seq([note(C5, .18, "bell", .45), note(G5, .18, "bell", .45), note(C6, .6, "bell", .45)]))
+# split-flap clock: a short mechanical clack (two quick filtered-noise ticks)
+def clack(dur=0.025, vol=0.6, seed=7):
+    t = np.arange(int(SR * dur)) / SR
+    n = np.random.default_rng(seed).standard_normal(len(t))
+    n = np.convolve(n, np.ones(4) / 4, mode="same")  # take the hiss off
+    return n * np.exp(-t * 180) * vol
+save("flap", seq([clack(), clack(0.02, 0.45, 11), clack(0.018, 0.3, 13)], gap=0.035))

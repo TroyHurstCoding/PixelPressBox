@@ -15,8 +15,8 @@ uint16_t gfxColor(uint32_t c);
 void gfxText(const String &s, int x, int y, uint32_t color, int size);
 
 static const int W = 64, H = 32;
-static inline void px(int x, int y, uint32_t c) {
-  if (x >= 0 && x < W && y >= 0 && y < H) gfxPanel()->drawPixel(x, y, gfxColor(c));
+static inline void px(int x, int y, uint32_t c) {  // clip to the panel's current shape (32x64 when turned)
+  if (x >= 0 && y >= 0 && x < gfxPanel()->width() && y < gfxPanel()->height()) gfxPanel()->drawPixel(x, y, gfxColor(c));
 }
 static inline void fill(int x, int y, int w, int h, uint32_t c) {
   if (w > 0 && h > 0) gfxPanel()->fillRect(x, y, w, h, gfxColor(c));

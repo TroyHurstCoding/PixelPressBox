@@ -13,6 +13,8 @@
 #include "webpage_gz.h"  // src/webpage.h, gzipped at build time by tools/gzip_webpage.py
 #include "wifinet.h"
 #include "motion.h"
+#include "games.h"
+#include "feeds5.h"
 
 static WebServer server(80);
 volatile bool webWantsRestart = false;
@@ -29,6 +31,8 @@ volatile bool webPinChanged = false;
 volatile bool webCheckUpdate = false;
 volatile int webGameCmd = -2;
 String webCardsJson = "{\"pinned\":\"\",\"cards\":[]}";
+volatile int webSandCmd = -1;
+String webPickemJson = "[]";
 
 static void handleRoot() {
   server.sendHeader("Content-Encoding", "gzip");
@@ -127,8 +131,30 @@ void webBegin() {
   });
   server.on("/game", HTTP_GET, [] {
     int g = server.arg("g").toInt();
-    webGameCmd = (g == 99 || (g >= -1 && g <= 6)) ? g : -2;
+    webGameCmd = (g == 99 || (g >= -1 && g < G_COUNT)) ? g : -2;
     server.send(200, "text/plain", "ok");
+  });
+  server.on("/sand", HTTP_GET, [] {  // /sand?s=90 start a 90-second sand timer, /sand?s=0 stop it
+    webSandCmd = constrain(server.arg("s").toInt(), 0, 99 * 60);
+    server.send(200, "text/plain", "ok");
+  });
+  server.on("/pickem/games", HTTP_GET, [] { server.send(200, "application/json", webPickemJson); });
+  server.on("/stocks/list", HTTP_GET, [] {  // Robinhood's stock-token list (the browser can't fetch it itself)
+    std::vector<std::pair<String, String>> l;
+    if (!fetchStockList(l)) {
+      server.send(502, "application/json", "[]");
+      return;
+    }
+    JsonDocument d;
+    JsonArray a = d.to<JsonArray>();
+    for (auto &x : l) {
+      JsonArray r = a.add<JsonArray>();
+      r.add(x.first);
+      r.add(x.second);
+    }
+    String out;
+    serializeJson(d, out);
+    server.send(200, "application/json", out);
   });
   server.on("/focus", HTTP_GET, [] {
     webFocusCmd = constrain(server.arg("m").toInt(), 0, 180);

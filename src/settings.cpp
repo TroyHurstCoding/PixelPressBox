@@ -230,6 +230,93 @@ bool loadSettings(const char *path) {
   c.fptsDstTiers.clear();
   for (JsonArrayConst t : fp["dst_points_allowed"].as<JsonArrayConst>())
     if (t.size() == 2) c.fptsDstTiers.push_back({t[0].as<int>(), t[1].as<float>()});
+  // ---- batch 5
+  c.cardFlap = cards["split_flap_clock"] | c.cardFlap;
+  c.cardDials = cards["dials_clock"] | c.cardDials;
+  c.cardTerminal = cards["terminal_clock"] | c.cardTerminal;
+  c.cardSlots = cards["slot_clock"] | c.cardSlots;
+  c.cardWeeks = cards["life_in_weeks"] | c.cardWeeks;
+  c.cardEyes = cards["robot_eyes"] | c.cardEyes;
+  c.cardEightBall = cards["fortune_ball"] | c.cardEightBall;
+  c.cardParty = cards["party_tools"] | c.cardParty;
+  c.cardMaze = cards["maze"] | c.cardMaze;
+  c.cardPet = cards["pet"] | c.cardPet;
+  c.cardLaunch = cards["launches"] | c.cardLaunch;
+  c.cardPlayoff = cards["playoff_race"] | c.cardPlayoff;
+  c.cardWaits = cards["ride_waits"] | c.cardWaits;
+  c.cardStocks = cards["stocks"] | c.cardStocks;
+  c.cardNews = cards["news_alerts"] | c.cardNews;
+  c.cardLastPlay = cards["last_play"] | c.cardLastPlay;
+  c.cardDrive = cards["drive_time"] | c.cardDrive;
+  c.cardLotto = cards["powerball"] | c.cardLotto;
+  c.cardPickem = cards["pickem"] | c.cardPickem;
+  c.flapSound = cards["split_flap_sound"] | c.flapSound;
+  JsonObjectConst lw = d["life_in_weeks"];
+  String born = lw["birthday"] | "";        // "1994-07-12"
+  if (born.length() >= 10) {
+    c.birthYear = born.substring(0, 4).toInt();
+    c.birthMonth = born.substring(5, 7).toInt();
+    c.birthDay = born.substring(8, 10).toInt();
+  }
+  c.lifeYears = lw["years"] | c.lifeYears;
+  c.parkId = d["ride_waits"]["park_id"] | c.parkId.c_str();
+  c.parkName = d["ride_waits"]["park_name"] | c.parkName.c_str();
+  c.parkName.toUpperCase();
+  if (d["stocks"].is<JsonArrayConst>()) {
+    c.stocks.clear();
+    for (JsonVariantConst s : d["stocks"].as<JsonArrayConst>()) {
+      String sym = s.as<const char *>() ? s.as<const char *>() : "";
+      sym.trim();
+      sym.toUpperCase();
+      if (sym.length() && c.stocks.size() < 12 && !Settings::has(c.stocks, sym)) c.stocks.push_back(sym);
+    }
+  }
+  JsonObjectConst na = d["news_alerts"];
+  c.newsAlerts = na["banners"] | c.newsAlerts;
+  c.newsSound = na["sound"] | c.newsSound;
+  c.newsFavorites = na["favorites"] | c.newsFavorites;
+  c.newsFantasy = na["fantasy_players"] | c.newsFantasy;
+  if (na["keywords"].is<JsonArrayConst>()) {
+    c.newsKeywords.clear();
+    for (JsonVariantConst k : na["keywords"].as<JsonArrayConst>()) {
+      String w = k.as<const char *>() ? k.as<const char *>() : "";
+      w.trim();
+      w.toLowerCase();
+      if (w.length()) c.newsKeywords.push_back(w);
+    }
+  }
+  if (na["leagues"].is<JsonArrayConst>()) {
+    c.newsLeagues.clear();
+    for (JsonVariantConst k : na["leagues"].as<JsonArrayConst>()) {
+      String w = k.as<const char *>() ? k.as<const char *>() : "";
+      w.toLowerCase();
+      if (w.length()) c.newsLeagues.push_back(w);
+    }
+  } else if (na["leagues"].is<JsonObjectConst>()) {  // the phone page's league chips: {"nfl":true,"nba":false}
+    c.newsLeagues.clear();
+    for (JsonPairConst kv : na["leagues"].as<JsonObjectConst>())
+      if (kv.value().as<bool>()) c.newsLeagues.push_back(kv.key().c_str());
+  }
+  c.newsQuietStart = na["quiet_from"] | c.newsQuietStart;
+  c.newsQuietEnd = na["quiet_to"] | c.newsQuietEnd;
+  JsonObjectConst dt = d["drive_time"];
+  c.tomtomKey = dt["tomtom_key"] | "";
+  c.driveLabel = dt["label"] | c.driveLabel.c_str();
+  c.driveLabel.toUpperCase();
+  c.driveAddress = dt["address"] | "";
+  c.driveLat = dt["lat"] | 0.0f;
+  c.driveLon = dt["lon"] | 0.0f;
+  c.driveFrom = dt["from_hour"] | c.driveFrom;
+  c.driveTo = dt["to_hour"] | c.driveTo;
+  c.pickem.clear();
+  for (JsonObjectConst p : d["pickem"]["picks"].as<JsonArrayConst>()) {
+    PickemPick x;
+    x.league = p["league"] | "nfl";
+    x.gameId = p["game"] | "";
+    x.pick = p["pick"] | "";
+    x.pick.toUpperCase();
+    if (x.gameId.length() && x.pick.length()) c.pickem.push_back(x);
+  }
   if (d["billboard_years"].is<JsonArrayConst>()) {
     c.billboardYears.clear();
     for (JsonVariantConst y : d["billboard_years"].as<JsonArrayConst>()) c.billboardYears.push_back(y.as<int>());

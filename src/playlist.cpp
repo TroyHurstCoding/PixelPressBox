@@ -155,6 +155,26 @@ String cardLabel(const Card &c) {
     case CARD_VISUALIZER: return "Sound visualizer";
     case CARD_LIFE: return "Game of Life";
     case CARD_FLIGHTS: return "Planes overhead";
+    case CARD_FLAP: return "Split-flap clock";
+    case CARD_DIALS: return "Analog clock with dials";
+    case CARD_TERMINAL: return "Terminal clock";
+    case CARD_SLOTS: return "Slot-machine clock";
+    case CARD_WEEKS: return "Life in weeks";
+    case CARD_EYES: return "Robot eyes";
+    case CARD_EIGHTBALL: return "Fortune ball";
+    case CARD_PARTY: return "Party tools";
+    case CARD_MAZE: return "Maze";
+    case CARD_PET: return "Pixel pet";
+    case CARD_SANDTIMER: return "Sand timer";
+    case CARD_LAUNCH: return "Next launch: " + c.title;
+    case CARD_PLAYOFF: return "Playoff race: " + c.title;
+    case CARD_WAITS: return "Ride waits";
+    case CARD_STOCK: return "Stock: " + c.title;
+    case CARD_NEWS: return "News alerts";
+    case CARD_LASTPLAY: return "Last play: " + c.title;
+    case CARD_DRIVE: return "Drive time";
+    case CARD_LOTTO: return "Powerball";
+    case CARD_PICKEM: return "Pick'em";
   }
   return c.key;
 }

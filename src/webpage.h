@@ -59,6 +59,10 @@ textarea{width:100%;height:46vh;font:13px ui-monospace,Menlo,monospace}
   <div class="g2" style="margin-top:8px"><button data-go="/pin?k=">Rotate all</button><button data-go="/favs">Favorites only on/off</button></div>
  </div>
  <div class="card"><h2>Focus timer</h2><div class="g3"><button data-go="/focus?m=25">25 min</button><button data-go="/focus?m=50">50 min</button><button data-go="/focus?m=0">Stop</button></div></div>
+ <div class="card"><h2>Sand timer</h2>
+  <div class="g3"><button id="sm">− 15 s</button><button id="sv5" disabled style="font-size:20px">1:00</button><button id="sp">+ 15 s</button></div>
+  <div class="g2" style="margin-top:8px"><button class="p" id="ss">Start</button><button data-go="/sand?s=0">Stop</button></div>
+  <p class="mut">On the clock: double tap, choose TIMER, then tap once for every 15 seconds.</p></div>
  <div class="card"><h2>Busy light</h2><div class="g3"><button data-go="/busy?m=0">Auto</button><button class="r" data-go="/busy?m=1">Busy</button><button data-go="/busy?m=2">Free</button></div></div>
  <div class="card"><h2>Games</h2><div class="g" id="games"></div>
   <div class="g2" style="margin-top:8px"><button data-go="/game?g=99">Games menu</button><button data-go="/game?g=-1">Stop game</button></div>
@@ -128,6 +132,20 @@ const S=[
  ['mic.clap_control','Clap twice for the next screen','sw',0,0,'Uses the built-in microphones'],
  ['mic.sensitivity','Microphone sensitivity','sel',{low:'Low',medium:'Medium',high:'High',max:'Very high'}]]],
 ['Fantasy football',[['fantasy_points','','fpts']]],
+["Pick'em",[['pickem.picks','','pick']]],
+['News alerts',[
+ ['news_alerts.banners','Drop-down alerts','sw',0,0,'A banner slides over the screen for breaking news'],
+ ['news_alerts.sound','Alert sound','sw'],
+ ['news_alerts.favorites','My teams','sw'],['news_alerts.fantasy_players','My fantasy players','sw',0,0,'From the Fantasy football section'],
+ ['news_alerts.leagues','Leagues to watch','lgs'],
+ ['news_alerts.keywords','Words that matter','kws',0,0,'With a team or player of yours, e.g. trade, injury, out'],
+ ['news_alerts.quiet_from','No banners from','sel',H],['news_alerts.quiet_to','Until','sel',H]]],
+['Stocks',[['stocks','','stk']]],
+['Drive time',[
+ ['drive_time.address','Destination','txl',0,0,'Address or place, e.g. 100 Main St, Burbank CA'],
+ ['drive_time.label','Label','txt'],
+ ['drive_time.tomtom_key','TomTom key','txl',0,0,'Free at developer.tomtom.com (2,500 checks a day)'],
+ ['drive_time.from_hour','Weekday commute from','sel',H],['drive_time.to_hour','Until','sel',H]]],
 ['Work & focus',[
  ['outlook.busy_light','Busy light during meetings','sw'],['outlook.teams_presence','Use Teams status','sw'],['outlook.flagged_email','Flagged emails as to-dos','sw'],
  ['outlook.sync_tasks','Sync Microsoft To Do','sw'],
@@ -135,11 +153,15 @@ const S=[
  ['focus.minutes','Focus session','sel',{15:'15 minutes',25:'25 minutes',45:'45 minutes',50:'50 minutes',60:'1 hour'}],
  ['focus.break','Break after','sel',{0:'No break',5:'5 minutes',10:'10 minutes',15:'15 minutes'}]]],
 ['Screens in the rotation',[
- ['cards','','chips',[['Info',{weather_details:'Weather',sun_moon:'Sun & moon',date_progress:'Year progress',on_this_day:'On this day',word_of_the_day:'Word of the day',dad_jokes:'Dad jokes',trivia:'Trivia',facts_quotes:'Facts & quotes',billboard:'Billboard #1s',national_day:'National day',hacker_news:'Hacker News',surf:'Surf report',iss_map:'Space station',planets:'Planets',fly_the_w:'Win flag'}],
-  ['Clocks',{nixie_clock:'Nixie',big_clock:'Big digits',word_clock:'Words',tetris_clock:'Tetris',portrait_clock:'Tall clock',binary_clock:'Binary',sun_clock:'Sun arc',city_clock:'City skyline',world_clock:'World clock',sand_clock:'Sand'}],
-  ['Sports',{win_probability:'Win probability',top_performers:'Top performers',next_game:'Next game',golf:'Golf leaderboard',fantasy_points:'Fantasy points'}],
+ ['cards','','chips',[['Info',{weather_details:'Weather',sun_moon:'Sun & moon',date_progress:'Year progress',on_this_day:'On this day',word_of_the_day:'Word of the day',dad_jokes:'Dad jokes',trivia:'Trivia',facts_quotes:'Facts & quotes',billboard:'Billboard #1s',national_day:'National day',hacker_news:'Hacker News',surf:'Surf report',iss_map:'Space station',planets:'Planets',fly_the_w:'Win flag',launches:'Rocket launches',ride_waits:'Ride waits',stocks:'Stocks',drive_time:'Drive time',powerball:'Powerball',news_alerts:'News alerts list'}],
+  ['Clocks',{nixie_clock:'Nixie',big_clock:'Big digits',word_clock:'Words',tetris_clock:'Tetris',portrait_clock:'Tall clock',binary_clock:'Binary',sun_clock:'Sun arc',city_clock:'City skyline',world_clock:'World clock',sand_clock:'Sand',split_flap_clock:'Split-flap',dials_clock:'Analog + dials',terminal_clock:'Terminal',slot_clock:'Slot machine',life_in_weeks:'Life in weeks'}],
+  ['Sports',{win_probability:'Win probability',top_performers:'Top performers',next_game:'Next game',golf:'Golf leaderboard',fantasy_points:'Fantasy points',last_play:'Last play',playoff_race:'Playoff race',pickem:"Pick'em"}],
+  ['Fun',{pet:'Pixel pet',robot_eyes:'Robot eyes',fortune_ball:'Fortune ball (shake)',party_tools:'Dice, coin & spinner (shake)',maze:'Maze'}],
   ['Ambient',{fireplace:'Fireplace',digital_rain:'Digital rain',aquarium:'Aquarium',bouncing_logo:'Bouncing logo',snake:'Snake',breakout:'Breakout',double_pendulum:'Pendulum',newtons_cradle:"Newton's cradle",water:'Water',images:'My pictures',beer:'Beer glass',hourglass:'Hourglass',lava_lamp:'Lava lamp',game_of_life:'Game of Life',visualizer:'Sound visualizer',planes:'Planes overhead'}]]],
  ['cards.bounce_text','Bouncing logo text','txt'],
+ ['cards.split_flap_sound','Split-flap clicks','sw',0,0,'When the minute flips (if sound is on)'],
+ ['life_in_weeks.birthday','Birthday (life in weeks)','date'],
+ ['ride_waits.park_id','Park for ride waits','park'],
  ['world_clocks','World clock cities','wcs'],
  ['planes.radius_km','Planes within','sel',{15:'15 km',25:'25 km',40:'40 km',60:'60 km'},0,'Around your weather location; from OpenSky Network'],['cards.rain_word','Word hidden in the rain','txt'],
  ['holidays.show','Holidays','sel',{all:'All holidays',federal:'Federal only',off:'Off'}]]],
@@ -186,6 +208,17 @@ function field(d){const[p,label,t,a,b,hint]=d,v=get(p);
   const o=E('input',{type:'number',step:'0.25',value:r.utc==null?0:r.utc});o.setAttribute('aria-label','Hours from UTC');o.style.flex='0 0 74px';o.title='Hours from UTC';o.onchange=()=>up('utc',+o.value||0);
   const d=E('select');d.setAttribute('aria-label','Daylight saving');for(const[k,v]of[['','No DST'],['us','US DST'],['eu','EU DST'],['au','AU DST']])d.append(E('option',{value:k,textContent:v,selected:(r.dst||'')==k}));d.style.minWidth='0';d.onchange=()=>up('dst',d.value);return[n,o,d]},'Add a city','Hours from UTC in standard time, e.g. -5 for New York, 5.5 for Mumbai. Up to 4 show.');
  if(t=='fpts')return fptsEd(p);
+ if(t=='date'){const n=E('input',{type:'date',value:v||''});n.setAttribute('aria-label',label);n.onchange=()=>set(p,n.value);return row(label,hint,n)}
+ if(t=='txl'){const n=E('input',{type:'text',value:v||'',maxLength:120});n.setAttribute('aria-label',label);n.style.minWidth='0';
+  n.onchange=()=>{set(p,n.value.trim());if(p=='drive_time.address'){put('drive_time.lat',0);put('drive_time.lon',0)}};
+  const w=E('div',{className:'f',style:'display:block'},E('span',{},label));if(hint)w.firstChild.append(E('small',{},hint));n.style.width='100%';w.append(n);return w}
+ if(t=='kws'){const n=E('input',{type:'text',value:(v||['trade','traded','injury','injured','out for','torn','signs','released']).join(', ')});n.setAttribute('aria-label',label);
+  n.onchange=()=>set(p,n.value.toLowerCase().split(',').map(x=>x.trim()).filter(x=>x));return row(label,hint,n)}
+ if(t=='park'){const s=E('select');s.setAttribute('aria-label',label);const P={16:'Disneyland',17:'California Adventure',66:'Universal Studios Hollywood',61:"Knott's Berry Farm",32:'Six Flags Magic Mountain',279:'Legoland California',6:'Magic Kingdom',5:'EPCOT',7:'Hollywood Studios',8:'Animal Kingdom',65:'Universal Orlando',64:'Islands of Adventure'};
+  const cur=String(v||16);for(const k in P)s.append(E('option',{value:k,textContent:P[k],selected:k==cur}));
+  s.onchange=()=>{set(p,s.value);set('ride_waits.park_name',P[s.value].toUpperCase().replace("'",'').slice(0,12))};return row(label,'From queue-times.com',s)}
+ if(t=='stk')return stkEd(p);
+ if(t=='pick')return pickEd(p);
  return E('div')}
 // ---- fantasy football: players to track (searched on ESPN from the phone), team names, week and the league's scoring
 const FDEF={passYds:.04,passTD:5,passInt:-2,rushYds:.1,rushTD:6,recYds:.1,recTD:6,rec:.5,fumLost:-2,fgMade:3,xpMade:1,fgMiss:-2,xpMiss:-1,
@@ -261,6 +294,37 @@ function fptsEd(p,prevLog){const w=E('div');const fp=()=>{const o=get(p);return 
  draw();w.append(sc);
  w.append(E('p',{className:'mut'},'Points use ESPN\'s live box scores. Field goals score a flat amount (ESPN does not give each kick\'s distance) and 2-point conversions are not counted.'));
  return w}
+// ---- stocks: symbols from Robinhood's stock-token list (fetched through the clock)
+let STL=null;
+function stkEd(p){const w=E('div');const l=()=>Array.isArray(get(p))?get(p):['SPY','QQQ','AAPL'];
+ const draw=()=>{w.textContent='';const c=E('div',{className:'chips'});
+  l().forEach((sym,i)=>{const x=E('button',{textContent:sym+'  ×',title:'Remove'});x.onclick=()=>{const n=l().slice();n.splice(i,1);set(p,n);draw()};c.append(x)});
+  w.append(c);const dl=E('datalist',{id:'stl'});(STL||[]).forEach(([s,n])=>dl.append(E('option',{value:s,label:n})));
+  const inp=E('input',{type:'text',placeholder:'Symbol, e.g. NVDA',autocapitalize:'characters'});inp.setAttribute('list','stl');inp.setAttribute('aria-label','Add a stock');
+  const msg=E('p',{className:'mut'},STL?STL.length+' stocks and funds available.':'Load the list to check symbols as you type.');
+  const add=E('button',{textContent:'Add'});add.onclick=()=>{const v=inp.value.trim().toUpperCase();if(!v)return;
+   if(STL&&!STL.some(([s])=>s==v)){msg.textContent=v+' is not on Robinhood\'s list.';return}
+   if(l().includes(v)||l().length>=12){msg.textContent=l().length>=12?'Up to 12 stocks.':v+' is already in.';return}set(p,l().concat([v]));draw()};
+  const ld=E('button',{textContent:STL?'Reload list':'Load the list'});ld.onclick=()=>{ld.disabled=true;msg.textContent='Asking the clock...';
+   fetch('/stocks/list').then(r=>r.json()).then(x=>{STL=x;draw()}).catch(()=>{msg.textContent='Could not load the list.';ld.disabled=false})};
+  w.append(E('div',{className:'rowl'},inp,add,ld),dl,msg,E('p',{className:'mut'},'Prices from Robinhood stock tokens, every 2 minutes on weekdays.'))};
+ draw();return w}
+// ---- pick'em: tap the team you think wins each game on the clock's scoreboard
+function pickEd(p){const w=E('div');const picks=()=>Array.isArray(get(p))?get(p):[];
+ const msg=E('p',{className:'mut'},'Loading games from the clock...');w.append(msg);
+ fetch('/pickem/games').then(r=>r.json()).then(gs=>{const draw=()=>{w.textContent='';
+  if(!gs.length){w.append(E('p',{className:'mut'},'No games on the clock right now. Turn on a league under Sports.'));return}
+  const by={};gs.forEach(g=>(by[g.lg]=by[g.lg]||[]).push(g));
+  for(const lg in by){w.append(E('div',{className:'sub'},(LG[lg]||lg.toUpperCase())));
+   by[lg].sort((a,b)=>a.t-b.t).forEach(g=>{const cur=picks().find(x=>x.league==lg&&x.game==g.id);const started=g.s!='p';
+    const b=team=>{const on=cur&&cur.pick==team;const x=E('button',{textContent:team,className:on?'p':''});x.disabled=started;
+     x.onclick=()=>{const n=picks().filter(q=>!(q.league==lg&&q.game==g.id));if(!on)n.push({league:lg,game:g.id,pick:team});set(p,n);draw()};return x};
+    const when=new Date(g.t*1000).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'});
+    w.append(E('div',{className:'rowl'},b(g.a),E('span',{className:'mut',style:'flex:1;text-align:center'},'@ '+when+(g.ln?' · '+g.ln:'')),b(g.h)))})}
+  const clr=E('button',{textContent:'Clear finished picks'});clr.style.marginTop='8px';
+  clr.onclick=()=>{const live=new Set(gs.filter(g=>g.s=='p'||g.s=='i').map(g=>g.lg+':'+g.id));set(p,picks().filter(x=>live.has(x.league+':'+x.game)));draw()};
+  w.append(clr,E('p',{className:'mut'},'Picks lock when a game starts. Your season record is kept on the clock.'))};draw()})
+ .catch(()=>{msg.textContent='Could not reach the clock.'});return w}
 function tin(v,ph,fn){const i=E('input',{type:'text',value:v||'',placeholder:ph});i.setAttribute('aria-label',ph);i.onchange=()=>fn(i.value);return i}
 function chip(label,on,fn){const i=E('input',{type:'checkbox',checked:!!on});i.onchange=()=>fn(i.checked);return E('label',{className:'chip'},i,E('span',{},label))}
 function listEd(p,blank,cells,addText,note){const w=E('div');const draw=()=>{w.textContent='';const l=Array.isArray(get(p))?get(p):[];
@@ -280,7 +344,9 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(!
  if(b.dataset.go=='/restart'&&!confirm('Restart the clock?'))return;go(b.dataset.go).then(()=>{if(b.dataset.go.startsWith('/todo'))todo()})});
 document.querySelectorAll('nav button').forEach((b,i)=>b.onclick=()=>{tab=i;document.querySelectorAll('nav button').forEach((x,j)=>x.classList.toggle('on',i==j));
  document.querySelectorAll('section').forEach((x,j)=>x.classList.toggle('on',i==j));$('bar').style.display=i==2&&$('sv').dataset.d?'block':'none';scrollTo(0,0);if(i==1)todo();if(i==3){wifi();mot()}});
-['Dodger','TiltyBird','MarbleRun','Catch','Breakout','Racer','Balance','Pong','Simon','Lander','Reaction'].forEach((g,i)=>$('games').append(E('button',{textContent:g,onclick:()=>go('/game?g='+i)})));
+['Dodger','TiltyBird','MarbleRun','Catch','Breakout','Racer','Balance','Pong','Simon','Lander','Reaction','Blockfall (stand it up)'].forEach((g,i)=>$('games').append(E('button',{textContent:g,onclick:()=>go('/game?g='+i)})));
+let sandS=60;const sandShow=()=>{$('sv5').textContent=Math.floor(sandS/60)+':'+String(sandS%60).padStart(2,'0')};
+$('sm').onclick=()=>{sandS=Math.max(15,sandS-15);sandShow()};$('sp').onclick=()=>{sandS=Math.min(5940,sandS+15);sandShow()};$('ss').onclick=()=>go('/sand?s='+sandS);sandShow();
 $('pin').onchange=function(){go('/pin?k='+encodeURIComponent(this.value))};
 function todo(){fetch('/todo').then(r=>r.json()).then(l=>{const u=$('tl');u.textContent='';l.forEach((x,i)=>{
  if(x.source==='microsoft'){u.append(E('li',{},E('span',{},'MS To Do · '+x.t)));return}

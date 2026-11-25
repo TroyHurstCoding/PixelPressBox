@@ -33,6 +33,9 @@
 #include "feeds3.h"
 #include "fantasy.h"
 #include "render3.h"
+#include "render5.h"
+#include "feeds5.h"
+#include "pet.h"
 #include "motion.h"
 #include "games.h"
 #include "render.h"
@@ -104,6 +107,29 @@ static GolfBoard golf;
 static std::vector<NextGame> nextGames;
 static std::vector<Flight> flights;
 static uint32_t nextFpts = 0, nextExtras = 0, nextGolf = 0, nextNextGame = 0, nextFlights = 0;
+// batch 5 data
+static std::vector<Launch> launches;
+static ParkWaits parkWaits;
+static std::vector<StockQuote> stockQuotes;    // netTask's working copy is the same vector (under the lock)
+static std::vector<NewsItem> newsItems;        // newest first, at most 10 (the "recent alerts" card)
+static std::vector<NewsItem> newsQueue;        // banners waiting to drop down
+static DriveTime drive;
+static LottoDraw lotto;
+static int pickemW = 0, pickemL = 0;           // season record (Preferences "pickem")
+static uint32_t nextLaunch = 0, nextWaits = 0, nextStocks = 0, nextNews = 0, nextDrive = 0, nextLotto = 0;
+static PetState pet;
+static uint32_t petSavedAt = 0;
+static bool petCheerPending = false;           // a favorite scored: the pet and the eyes get excited
+static uint32_t excitedUntil = 0;              // millis()
+static bool cardWantsShake = false, cardShaken = false;  // the fortune ball and party tools take shakes
+static long sandTotal = 0;                     // running sand timer: total seconds (0 = none)
+static time_t sandEnd = 0;
+// some screens shouldn't be covered by a news banner (celebrations, menus, timers): hold them meanwhile
+static int holdBanners = 0;
+struct HoldBanners {
+  HoldBanners() { holdBanners++; }
+  ~HoldBanners() { holdBanners--; }
+};
 static bool cardWantsTaps = false, cardTapped = false;  // interactive screens take single taps themselves
 static bool flatSleeping = false;
 static uint32_t flatSince = 0;
@@ -132,6 +158,25 @@ static void updateCardsJson() {
   String out;
   serializeJson(d, out);
   webCardsJson = out;
+  // pick'em: games not started yet (and today's), for the phone page
+  JsonDocument pg;
+  JsonArray ga = pg.to<JsonArray>();
+  time_t now = time(nullptr);
+  for (auto &kv : games)
+    for (auto &g : kv.second) {
+      if (g.state == 'f' && now - g.start > 86400) continue;
+      JsonObject o = ga.add<JsonObject>();
+      o["lg"] = g.league;
+      o["id"] = g.id;
+      o["a"] = g.away.abbr;
+      o["h"] = g.home.abbr;
+      o["t"] = (long)g.start;
+      o["s"] = String(g.state);
+      if (g.line.length()) o["ln"] = g.line;
+    }
+  String po;
+  serializeJson(pg, po);
+  webPickemJson = po;
 }
 static uint32_t nextUfc = 0;
 static uint32_t nextWeather = 0, nextCalendar = 0, nextSpotify = 0;
@@ -177,6 +222,18 @@ static void stopFocus();
 
 // Returns 1 = next card, 2 = press (focus timer), 3 = favorites toggle, 4 = state changed (redraw now),
 // 5 = games (phone page or a shake), 0 = timed out
+// news banners are held (they still collect in the alerts card) in quiet hours, during the night and while
+// something that shouldn't be covered is up
+static bool newsBannerOk() {
+  if (!CFG.newsAlerts || otaBusy || holdBanners || focusOn || sandTotal) return false;
+  time_t now = nowUtc();
+  struct tm lt;
+  localtime_r(&now, &lt);
+  int h = lt.tm_hour, a = CFG.newsQuietStart, b = CFG.newsQuietEnd;
+  bool quiet = a == b ? false : a < b ? (h >= a && h < b) : (h >= a || h < b);
+  return !quiet;
+}
+
 static int pump(uint32_t ms) {
   uint32_t t0 = millis();
   while (millis() - t0 < ms) {
@@ -219,8 +276,12 @@ static int pump(uint32_t ms) {
         return 4;
       }
       if (motionTakeShake()) {
-        webGameCmd = 99;  // shake: games menu
-        return 5;
+        if (cardWantsShake) {
+          cardShaken = true;  // the fortune ball / party tools use the shake themselves
+        } else {
+          webGameCmd = 99;  // shake: games menu
+          return 5;
+        }
       }
       if (CFG.accelTaps) {
         int tap = motionTakeTap();
@@ -261,6 +322,14 @@ static int pump(uint32_t ms) {
       webBusyMode = -1;
       return 4;
     }
+    if (webSandCmd >= 0) {  // phone page: start (seconds) or stop (0) the sand timer
+      int sec = webSandCmd;
+      webSandCmd = -1;
+      sandTotal = sec;
+      sandEnd = sec > 0 ? nowUtc() + sec : 0;
+      return 4;
+    }
+    if (!newsQueue.empty() && newsBannerOk()) return 7;  // a news alert drops down over the screen
     if (webFocusCmd >= 0) {
       int m = webFocusCmd;
       webFocusCmd = -1;
@@ -424,7 +493,7 @@ static bool refreshData() {
 
   // standings: every 6 hours per league, in season only
   for (auto &lg : CFG.leagues) {
-    if (!CFG.cardStandings || !inSeason(lg, now) || (int32_t)(millis() - nextStandings[lg]) < 0) continue;
+    if (!(CFG.cardStandings || CFG.cardPlayoff) || !inSeason(lg, now) || (int32_t)(millis() - nextStandings[lg]) < 0) continue;
     std::vector<StandGroup> g;
     bool ok = fetchStandings(lg, g);
     if (ok) {
@@ -667,6 +736,166 @@ static bool refreshData() {
     changed |= ok;
   }
 
+  // ---- batch 5 feeds
+  struct tm lt5;
+  localtime_r(&now, &lt5);
+  if (CFG.cardLaunch && (int32_t)(millis() - nextLaunch) >= 0) {
+    std::vector<Launch> l;
+    bool ok = fetchLaunches(l);
+    if (ok) {
+      Lock lock;
+      launches = l;
+    }
+    bool soon = ok && !l.empty() && l[0].net - now < 3600 && l[0].net - now > -1800;
+    nextLaunch = millis() + (soon ? 300 : ok ? 1800 : 900) * 1000UL;  // the free API allows 15 calls an hour
+    changed |= ok;
+  }
+  if (CFG.cardWaits && CFG.parkId.length() && (int32_t)(millis() - nextWaits) >= 0) {
+    ParkWaits p;
+    bool ok = fetchParkWaits(CFG.parkId, CFG.parkName, p);
+    if (ok) {
+      Lock lock;
+      parkWaits = p;
+    }
+    nextWaits = millis() + (ok ? (p.rides.empty() ? 1800 : 300) : 900) * 1000UL;
+    changed |= ok;
+  }
+  if (CFG.cardStocks && !CFG.stocks.empty() && (int32_t)(millis() - nextStocks) >= 0) {
+    std::vector<StockQuote> q;
+    {
+      Lock lock;
+      q = stockQuotes;
+    }
+    std::vector<StockQuote> out;  // follow the phone page's list (and its order), keeping each one's history
+    for (auto &sym : CFG.stocks) {
+      StockQuote one;
+      one.symbol = sym;
+      for (auto &x : q)
+        if (x.symbol == sym) one = x;
+      stockRollover(one, now);
+      fetchStock(sym, one, now);
+      out.push_back(one);
+    }
+    {
+      Lock lock;
+      stockQuotes = out;
+    }
+    bool weekend = lt5.tm_wday == 0 || lt5.tm_wday == 6;
+    nextStocks = millis() + (weekend ? 1800 : 120) * 1000UL;
+    changed = true;
+  }
+  if ((CFG.cardNews || CFG.newsAlerts) && (int32_t)(millis() - nextNews) >= 0) {
+    static std::vector<String> seen;  // article ids already handled
+    static bool primed = false;       // the first download only fills the list: no banners for old news
+    NewsWatch w;
+    if (CFG.newsFavorites) w.teams = CFG.favorites;
+    if (CFG.newsFantasy)
+      for (auto &p : CFG.fptsPlayers) {
+        if (p.pos == "DST") w.teams.push_back({"nfl", p.team});
+        else {
+          if (p.id.length()) w.athleteIds.push_back(p.id);
+          w.playerNames.push_back(p.name);
+        }
+      }
+    w.keywords = CFG.newsKeywords;
+    std::vector<NewsItem> found;
+    bool ok = true;
+    for (auto &lg : CFG.newsLeagues) {
+      std::vector<NewsItem> n;
+      if (fetchNews(lg, w, n)) found.insert(found.end(), n.begin(), n.end());
+      else ok = false;
+    }
+    std::sort(found.begin(), found.end(), [](const NewsItem &a, const NewsItem &b) { return a.published > b.published; });
+    std::vector<NewsItem> fresh;
+    for (auto &n : found) {
+      if (CFG.has(seen, n.id)) continue;
+      seen.push_back(n.id);
+      if (primed && now - n.published < 6 * 3600) fresh.push_back(n);
+      else n.read = true;
+      if (!primed) fresh.push_back(n);
+    }
+    if (seen.size() > 200) seen.erase(seen.begin(), seen.begin() + 100);
+    if (!fresh.empty()) {
+      Lock lock;
+      for (auto it = fresh.rbegin(); it != fresh.rend(); ++it) {
+        newsItems.insert(newsItems.begin(), *it);
+        if (primed && CFG.newsAlerts) newsQueue.push_back(*it);
+      }
+      if (newsItems.size() > 10) newsItems.resize(10);
+      if (newsQueue.size() > 5) newsQueue.erase(newsQueue.begin(), newsQueue.end() - 5);  // keep the latest
+    }
+    primed |= ok;
+    nextNews = millis() + (ok ? 180 : 600) * 1000UL;
+    changed |= !fresh.empty();
+  }
+  if (CFG.cardDrive && CFG.tomtomKey.length() && (CFG.lat != 0 || CFG.lon != 0) &&
+      (int32_t)(millis() - nextDrive) >= 0) {
+    bool ok = false;
+    if (CFG.driveLat == 0 && CFG.driveLon == 0 && CFG.driveAddress.length()) {
+      float la, lo;
+      if (geocodeTomTom(CFG.tomtomKey, CFG.driveAddress, la, lo)) {
+        Lock lock;
+        CFG.driveLat = la;
+        CFG.driveLon = lo;
+      }
+    }
+    if (CFG.driveLat != 0 || CFG.driveLon != 0) {
+      DriveTime d;
+      ok = fetchDriveTime(CFG.tomtomKey, CFG.lat, CFG.lon, CFG.driveLat, CFG.driveLon, d);
+      if (ok) {
+        d.label = CFG.driveLabel;
+        d.at = now;
+        Lock lock;
+        drive = d;
+      }
+    }
+    bool window = lt5.tm_wday >= 1 && lt5.tm_wday <= 5 && lt5.tm_hour >= CFG.driveFrom - 1 && lt5.tm_hour < CFG.driveTo;
+    nextDrive = millis() + (window ? 300 : 1800) * 1000UL;  // free tier: 2,500 calls a day
+    changed |= ok;
+  }
+  if (CFG.cardLotto && (int32_t)(millis() - nextLotto) >= 0) {
+    LottoDraw d;
+    bool ok = fetchLotto(d, now);
+    if (ok) {
+      Lock lock;
+      lotto = d;
+    }
+    // every 6 hours, and soon after a draw so the new numbers show up the same night
+    long untilDraw = ok ? (long)(d.nextDraw - now) : 0;
+    long wait = ok ? (untilDraw > 0 && untilDraw < 6 * 3600 ? untilDraw + 3600 : 6 * 3600) : 1800;
+    nextLotto = millis() + wait * 1000UL;
+    changed |= ok;
+  }
+  if (CFG.cardPickem && !CFG.pickem.empty()) {  // score the picks from the scoreboards already downloaded
+    std::vector<PickemPick> picks;
+    {
+      Lock lock;
+      picks = CFG.pickem;
+    }
+    if (pickemScore(picks, games)) {
+      Lock lock;
+      // season record: each decided game counted once (ids kept in Preferences)
+      Preferences pr;
+      pr.begin("pickem", false);
+      String log = pr.getString("log", "");
+      for (auto &p : picks) {
+        if (p.result == ' ') continue;
+        String tag = p.league + ":" + p.gameId + ";";
+        if (log.indexOf(tag) >= 0) continue;
+        log += tag;
+        if (p.result == 'W') pickemW++;
+        else if (p.result == 'L') pickemL++;
+      }
+      if (log.length() > 3500) log = log.substring(log.length() - 3000);
+      pr.putString("log", log);
+      pr.putInt("w", pickemW);
+      pr.putInt("l", pickemL);
+      pr.end();
+      CFG.pickem = picks;
+      changed = true;
+    }
+  }
+
   if (CFG.ufc && (int32_t)(millis() - nextUfc) >= 0) {
     std::vector<FightEvent> u;
     bool ok = fetchUfc(u);
@@ -781,6 +1010,99 @@ static void rebuild() {
     c.pri = fpts.anyLive ? PRI_FAV_LIVE : fpts.anyStarted ? PRI_FANTASY + 5 : PRI_AMBIENT + 2;
     extra.push_back(c);
   }
+  // ---- batch 5
+  if (CFG.cardFlap) ambient(CARD_FLAP, "flap", 12, PRI_AMBIENT);
+  if (CFG.cardDials) ambient(CARD_DIALS, "dials", 10, PRI_AMBIENT);
+  if (CFG.cardTerminal) ambient(CARD_TERMINAL, "terminal", 12, PRI_AMBIENT);
+  if (CFG.cardSlots) ambient(CARD_SLOTS, "slots", 10, PRI_AMBIENT);
+  if (CFG.cardWeeks && CFG.birthYear > 1900) ambient(CARD_WEEKS, "weeks", 8, PRI_AMBIENT);
+  if (CFG.cardEyes) ambient(CARD_EYES, "eyes", 12, PRI_AMBIENT);
+  if (CFG.cardEightBall) ambient(CARD_EIGHTBALL, "fortune", 10, PRI_AMBIENT);
+  if (CFG.cardParty) ambient(CARD_PARTY, "party", 10, PRI_AMBIENT);
+  if (CFG.cardMaze) ambient(CARD_MAZE, "maze", 15, PRI_AMBIENT);
+  if (CFG.cardPet) ambient(CARD_PET, "pet", 12, PRI_AMBIENT + 1);
+  if (CFG.cardLaunch && !launches.empty() && launches[0].net - now < 7 * 86400L) {
+    Card c;
+    c.kind = CARD_LAUNCH;
+    c.key = "launch";
+    c.title = launches[0].rocket;
+    c.dwell = 10;
+    long t = (long)(launches[0].net - now);
+    c.pri = t < 600 && t > -300 ? PRI_FAV_LIVE : launches[0].vandenberg && t < 3600 && t > 0 ? PRI_FAV_PRE
+                                                                                           : PRI_AMBIENT + 2;
+    c.live = t < 600 && t > -300;
+    extra.push_back(c);
+  }
+  if (CFG.cardWaits && parkWaits.ok && !parkWaits.rides.empty()) {
+    Card c;
+    c.kind = CARD_WAITS;
+    c.key = "waits";
+    c.dwell = 4 * std::max(1, parkPages(parkWaits));
+    c.pri = PRI_AMBIENT + 2;
+    extra.push_back(c);
+  }
+  if (CFG.cardStocks)
+    for (auto &q : stockQuotes) {
+      if (!q.ok) continue;
+      Card c;
+      c.kind = CARD_STOCK;
+      c.key = "stock:" + q.symbol;
+      c.title = q.symbol;
+      c.text = q.symbol;
+      c.dwell = 6;
+      c.pri = PRI_AMBIENT + 2;
+      extra.push_back(c);
+    }
+  if (CFG.cardNews && !newsItems.empty()) ambient(CARD_NEWS, "news", 4 * std::min<int>(5, newsItems.size()), PRI_AMBIENT + 3);
+  if (CFG.cardDrive && drive.ok && now - drive.at < 3600) {
+    struct tm lt;
+    localtime_r(&now, &lt);
+    bool window = lt.tm_wday >= 1 && lt.tm_wday <= 5 && lt.tm_hour >= CFG.driveFrom && lt.tm_hour < CFG.driveTo;
+    ambient(CARD_DRIVE, "drive", 8, window ? PRI_MEETING_LATER : PRI_AMBIENT + 1);
+  }
+  if (CFG.cardLotto && lotto.ok) ambient(CARD_LOTTO, "powerball", 8, PRI_AMBIENT + 1);
+  if (CFG.cardPickem && CFG.sports != "off" && !CFG.pickem.empty()) {
+    bool live = false;
+    for (auto &p : CFG.pickem)
+      for (auto &g : games[p.league])
+        if (g.id == p.gameId && g.state == 'i') live = true;
+    ambient(CARD_PICKEM, "pickem", 4 * std::max(1, pickemPages(CFG.pickem)), live ? PRI_ALL_LIVE + 5 : PRI_FANTASY);
+  }
+  if (CFG.sports != "off") {
+    if (CFG.cardLastPlay)  // live favorite games with a last play to show
+      for (auto &lg : CFG.leagues)
+        for (auto &g : games[lg]) {
+          if (g.state != 'i' || !isFavoriteGame(g) || !g.lastPlay.length()) continue;
+          Card c;
+          c.kind = CARD_LASTPLAY;
+          c.key = "play:" + g.key();
+          c.text = g.key();
+          c.title = g.away.abbr + " @ " + g.home.abbr;
+          c.dwell = 8;
+          c.live = true;
+          c.pri = PRI_FAV_LIVE;
+          extra.push_back(c);
+        }
+    if (CFG.cardPlayoff)  // each favorite's group in the standings
+      for (auto &f : CFG.favorites) {
+        auto it = standings.find(f.first);
+        if (it == standings.end()) continue;
+        for (auto &grp : it->second) {
+          bool in = false;
+          for (auto &r : grp.rows) in |= r.abbr == f.second;
+          if (!in) continue;
+          Card c;
+          c.kind = CARD_PLAYOFF;
+          c.key = "race:" + f.first + ":" + f.second;
+          c.text = f.first + ":" + f.second;
+          c.title = f.second;
+          c.dwell = 8;
+          c.pri = PRI_AMBIENT + 3;
+          extra.push_back(c);
+          break;
+        }
+      }
+  }
   std::vector<String> nextIds;  // favorites' pre-game cards are replaced by the richer "next game" card
   if (CFG.sports != "off") {
     if (CFG.cardWinProb)
@@ -877,6 +1199,9 @@ static String nextFavText(time_t now) {
 // ------------------------------------------------------------------ celebrations
 static void celebrate(const ScoreEvent &ev) {
   const Team &t = ev.home ? ev.game.home : ev.game.away;
+  HoldBanners hold;
+  petCheerPending = true;             // the pet cheers and the robot eyes light up for a minute
+  excitedUntil = millis() + 60000;
   uint32_t c1 = teamColor(t), c2 = teamAlt(t);
   if (soundReady && !(CFG.quietAtNight && isNight(nowUtc()))) soundPlay(ev.sound, t.abbr);
   uint32_t t0 = millis();
@@ -1197,6 +1522,307 @@ static int showCard4(const Card *c) {
   }
 }
 
+// ------------------------------------------------------------------ batch 5 helpers
+static void petLoad() {
+  Preferences p;
+  p.begin("pet", true);
+  uint8_t buf[96];
+  size_t n = p.getBytes("s", buf, sizeof buf);
+  p.end();
+  if (!n || !petUnpack(pet, buf, n)) pet = PetState();
+}
+static void petSave() {
+  uint8_t buf[96];
+  size_t n = petPack(pet, buf, sizeof buf);
+  if (!n) return;
+  Preferences p;
+  p.begin("pet", false);
+  p.putBytes("s", buf, n);
+  p.end();
+  petSavedAt = millis();
+}
+// the pet lives on whether or not its card is showing: called from the main loop
+static void petHousekeeping() {
+  time_t now = nowUtc();
+  if (now < 1700000000) return;  // no clock time yet
+  if (!pet.born) {
+    pet = PetState();
+    pet.born = pet.lastUpdate = pet.lastSeen = (uint32_t)now;
+    petSave();
+  }
+  petTick(pet, (uint32_t)now, isNight(now));
+  if (petCheerPending) {
+    petCheer(pet, (uint32_t)now);
+    petCheerPending = false;
+  }
+  if (millis() - petSavedAt > 10 * 60 * 1000UL) petSave();
+}
+
+// "BUF VS MIA SUN 1:00 CBS": the favorites' next game, for the split-flap board's second row
+static String nextGameLine(time_t now, uint32_t &color, time_t *start = nullptr, String *abbr = nullptr) {
+  const NextGame *best = nullptr;
+  for (auto &n : nextGames)
+    if (n.ok && n.start + 4 * 3600 > now && (!best || n.start < best->start)) best = &n;
+  if (!best) return "";
+  NextGame n = nextGameFor(best->league + ":" + best->us);
+  if (!n.ok) n = *best;
+  color = n.usColor;
+  if (start) *start = n.start;
+  if (abbr) *abbr = n.us;
+  String s = n.us + (n.home ? " VS " : " @ ") + n.them + " " + fmtStart(n.start, now);
+  if (n.tv.length()) s += " " + n.tv;
+  s.toUpperCase();
+  return s;
+}
+
+// a news alert drops down over whatever is on screen, scrolls its headline once, and goes back up
+static void showNewsBanner() {
+  if (newsQueue.empty()) return;
+  NewsItem n = newsQueue.front();
+  newsQueue.erase(newsQueue.begin());
+  for (auto &x : newsItems)
+    if (x.id == n.id) x.read = true;
+  HoldBanners hold;
+  if (CFG.newsSound && soundReady && !(CFG.quietAtNight && isNight(nowUtc()))) soundPlay("chime");
+  int w = textWidth(n.headline);
+  int x = 64;
+  uint32_t t0 = millis();
+  for (int f = 0; millis() - t0 < 20000; f++) {
+    drawNewsBanner(n, f, f < 8 ? 64 : x);
+    if (f >= 8 && --x < -w && millis() - t0 > 4000) break;
+    int r = pump(30);
+    if (r && r != 7) return;  // turned / button / phone: drop the banner
+  }
+}
+
+// sand timer, set mode: each tap (or a wheel turn) adds 15 seconds; 3 s without one starts it; double tap cancels
+static void runSandSetup() {
+  HoldBanners hold;
+  displaySetRotation(motionLandscapeRotation());
+  int setSec = 0;
+  uint32_t lastTap = millis();
+  for (int f = 0; millis() - lastTap < (setSec ? 3000u : 10000u); f++) {
+    drawSandTimer(0, 0, setSec, f);
+    int r = pump(33);
+    if (r == 1) {  // single tap / wheel
+      setSec = std::min(setSec + 15, 99 * 60);
+      lastTap = millis();
+      if (soundReady) soundPlay("xp");
+    } else if (r) {
+      return;
+    }
+  }
+  if (setSec) {
+    sandTotal = setSec;
+    sandEnd = nowUtc() + setSec;
+  }
+}
+
+// a running sand timer owns the screen (like the focus timer): tap = +15 s, double tap / wheel press = stop
+static void runSand() {
+  HoldBanners hold;
+  displaySetRotation(motionLandscapeRotation());
+  uint32_t t0 = millis();
+  static int frame = 0;
+  while (millis() - t0 < 1000) {
+    long remain = (long)(sandEnd - nowUtc());
+    if (remain <= 0) break;
+    drawSandTimer((int)sandTotal, (int)remain, 0, frame++);
+    int r = pump(33);
+    if (r == 1) {
+      sandTotal += 15;
+      sandEnd += 15;
+    } else if (r == 2 || r == 6) {
+      sandTotal = 0;
+      drawMessage("TIMER", "stopped", 0x707070);
+      pump(1000);
+      return;
+    } else if (r) {
+      break;
+    }
+  }
+  if (sandTotal && (long)(sandEnd - nowUtc()) <= 0) {  // time's up
+    if (soundReady) soundPlay("focus");
+    uint32_t t1 = millis();
+    for (int f = 0; millis() - t1 < 6000; f++) {
+      drawSandTimer((int)sandTotal, 0, 0, f);
+      if (pump(33)) break;
+    }
+    sandTotal = 0;
+  }
+}
+
+// batch 5 screens; -1 = not one of them
+static int showCard5(const Card *c) {
+  auto animate = [&](int frameMs, std::function<void(int)> draw) {
+    uint32_t t0 = millis();
+    for (int f = 0; millis() - t0 < (uint32_t)c->dwell * 1000; f++) {
+      draw(f);
+      int r = pump(frameMs);
+      if (r) return r;
+    }
+    return 0;
+  };
+  auto scrollItem = [&](int minMs, int textW, std::function<void(int)> draw) {  // draw(x): x scrolls once
+    int x = 64;
+    uint32_t t0 = millis();
+    while (millis() - t0 < 30000) {
+      draw(x);
+      if (--x < -textW && millis() - t0 > (uint32_t)minMs) break;
+      int r = pump(35);
+      if (r) return r;
+    }
+    return 0;
+  };
+  switch (c->kind) {
+    case CARD_FLAP: {
+      uint32_t col = 0xFFC000;
+      String sub = nextGameLine(nowUtc(), col);
+      return animate(33, [&](int f) {
+        if (drawFlapClock(nowUtc(), sub, col, f) && f > 0 && CFG.flapSound && soundReady &&
+            !(CFG.quietAtNight && isNight(nowUtc())))
+          soundPlay("flap");
+      });
+    }
+    case CARD_DIALS: {
+      uint32_t col = 0xFFFFFF;
+      time_t start = 0;
+      String abbr;
+      nextGameLine(nowUtc(), col, &start, &abbr);
+      return animate(250, [&](int) { drawDialsClock(nowUtc(), wx, start, abbr, col); });
+    }
+    case CARD_TERMINAL: return animate(50, [&](int f) { drawTerminalClock(nowUtc(), f); });
+    case CARD_SLOTS: return animate(33, [&](int f) { drawSlotClock(nowUtc(), f); });
+    case CARD_WEEKS:
+      return animate(100, [&](int f) {
+        drawLifeWeeks(nowUtc(), CFG.birthYear, CFG.birthMonth, CFG.birthDay, CFG.lifeYears, f);
+      });
+    case CARD_EYES:
+      return animate(33, [&](int f) {
+        float gx = 0, gy = 0.3f;
+        if (motion().present) logicalGravity(displayRotation(), gx, gy);
+        int mood = (int32_t)(excitedUntil - millis()) > 0 ? 1 : isNight(nowUtc()) ? 2 : 0;
+        drawEyes(f, gx, gy, mood);
+      });
+    case CARD_EIGHTBALL:
+      return animate(33, [&](int f) {
+        bool go = cardShaken || cardTapped;
+        cardShaken = cardTapped = false;
+        drawEightBall(f, go);
+      });
+    case CARD_PARTY: {
+      static int tool = 0;
+      return animate(33, [&](int f) {
+        if (cardTapped) {
+          cardTapped = false;
+          tool = (tool + 1) % 3;
+        }
+        bool go = cardShaken;
+        cardShaken = false;
+        drawParty(tool, f, go);
+      });
+    }
+    case CARD_MAZE: return animate(33, [&](int f) { drawMaze(f); });
+    case CARD_PET: {
+      petHousekeeping();
+      pet.lastSeen = (uint32_t)nowUtc();
+      uint32_t lastPlay = 0;
+      bool cheer = (int32_t)(excitedUntil - millis()) > 50000;  // a score in the last ten seconds
+      int r = animate(33, [&](int f) {
+        uint32_t now = (uint32_t)nowUtc();
+        bool fed = cardTapped;
+        cardTapped = false;
+        if (fed) petFeed(pet, now);
+        float gx = 0, gy = 1;
+        if (motion().present) logicalGravity(displayRotation(), gx, gy);
+        drawPet(pet, now, isNight(nowUtc()), f, fed, cheer && f < 60, gx, gy, motion().present);
+        if (petBallSpeed() > 0.6f && millis() - lastPlay > 500) {
+          lastPlay = millis();
+          petPlay(pet, now);
+        }
+      });
+      petSave();
+      return r;
+    }
+    case CARD_LAUNCH: {
+      if (launches.empty()) return 0;
+      Launch l = launches[0];
+      return animate(100, [&](int f) { drawLaunch(l, nowUtc(), f); });
+    }
+    case CARD_PLAYOFF: {
+      int colon = c->text.indexOf(':');
+      String lg = c->text.substring(0, colon), team = c->text.substring(colon + 1);
+      auto it = standings.find(lg);
+      if (it == standings.end()) return 0;
+      StandGroup grp;
+      for (auto &g : it->second)
+        for (auto &r : g.rows)
+          if (r.abbr == team) grp = g;
+      if (grp.rows.empty()) return 0;
+      uint32_t col = 0xFFFFFF;
+      for (auto &g : games[lg]) {
+        if (g.home.abbr == team) col = teamColor(g.home);
+        if (g.away.abbr == team) col = teamColor(g.away);
+      }
+      return animate(100, [&](int f) { drawPlayoff(grp, team, col, f); });
+    }
+    case CARD_WAITS: {
+      ParkWaits p = parkWaits;
+      int pages = std::max(1, parkPages(p));
+      for (int pg = 0; pg < pages; pg++) {
+        uint32_t t0 = millis();
+        for (int f = 0; millis() - t0 < 4000; f++) {
+          drawParkWaits(p, pg, f);
+          int r = pump(100);
+          if (r) return r;
+        }
+      }
+      return 0;
+    }
+    case CARD_STOCK: {
+      StockQuote q;
+      for (auto &x : stockQuotes)
+        if (x.symbol == c->text) q = x;
+      if (!q.ok) return 0;
+      return animate(100, [&](int f) { drawStock(q, f); });
+    }
+    case CARD_NEWS: {
+      std::vector<NewsItem> items = newsItems;
+      int n = std::min<int>(5, items.size());
+      for (int i = 0; i < n; i++) {
+        int r = scrollItem(3500, textWidth(items[i].headline), [&](int x) { drawNewsList(items, i, x); });
+        if (r) return r;
+      }
+      for (auto &x : newsItems) x.read = true;
+      return 0;
+    }
+    case CARD_LASTPLAY: {
+      int colon = c->text.indexOf(':');
+      String lg = c->text.substring(0, colon);
+      Game g;
+      for (auto &x : games[lg])
+        if (x.key() == c->text) g = x;
+      if (!g.id.length()) return 0;
+      return scrollItem(c->dwell * 1000, textWidth(g.lastPlay), [&](int x) { drawLastPlay(g, x); });
+    }
+    case CARD_DRIVE: return animate(250, [&](int f) { drawDriveTime(drive, nowUtc(), f); });
+    case CARD_LOTTO: return animate(100, [&](int f) { drawLotto(lotto, nowUtc(), f); });
+    case CARD_PICKEM: {
+      std::vector<PickemPick> picks = CFG.pickem;
+      std::vector<Game> all;
+      for (auto &kv : games) all.insert(all.end(), kv.second.begin(), kv.second.end());
+      int pages = std::max(1, pickemPages(picks));
+      for (int pg = 0; pg < pages; pg++) {
+        drawPickem(picks, all, pickemW, pickemL, pg);
+        int r = pump(4000);
+        if (r) return r;
+      }
+      return 0;
+    }
+    default: return -1;
+  }
+}
+
 static int showCardInner(const Card *c);
 
 static int showCard(const Card *c) {
@@ -1204,12 +1830,15 @@ static int showCard(const Card *c) {
   if (isPortraitCard(k)) displaySetRotation(motion().present && motion().orient == 3 ? 3 : 1);
   else if (isAnyOrientCard(k)) displaySetRotation(0);
   else displaySetRotation(motionLandscapeRotation());
-  cardWantsTaps = (k == CARD_CRADLE || k == CARD_BEER || k == CARD_LIFE);
-  cardTapped = false;
-  int r = c ? showCard4(c) : -1;
+  cardWantsTaps = (k == CARD_CRADLE || k == CARD_BEER || k == CARD_LIFE || k == CARD_EIGHTBALL || k == CARD_PARTY ||
+                   k == CARD_PET);
+  cardWantsShake = (k == CARD_EIGHTBALL || k == CARD_PARTY);
+  cardTapped = cardShaken = false;
+  int r = c ? showCard5(c) : -1;
+  if (r < 0 && c) r = showCard4(c);
   if (r < 0 && c) r = showCard3(c);
   if (r < 0) r = showCardInner(c);
-  cardWantsTaps = false;
+  cardWantsTaps = cardWantsShake = false;
   return r;
 }
 
@@ -1446,15 +2075,18 @@ static bool quietNow() { return CFG.quietAtNight && isNight(nowUtc()); }
 // The tap menu (double tap on any ordinary screen): tap = next entry, double tap (or the wheel press / BOOT hold) =
 // choose, 6 s of nothing = back to the screens. Entries are focus, games, favorites and clock.
 static int tapMenu() {
-  static const char *const items[] = {"FOCUS", "GAMES", "FAVS ONLY", "CLOCK"};
+  HoldBanners hold;
+  static const char *const items[] = {"FOCUS", "GAMES", "FAVS ONLY", "CLOCK", "TIMER"};
+  constexpr int n = sizeof items / sizeof items[0];
   displaySetRotation(motionLandscapeRotation());
   int sel = 0;
   uint32_t last = millis();
   while (millis() - last < 6000) {
-    drawTapMenu(sel, items, 4);
+    int first = std::max(0, sel - 3);  // the menu shows 4 rows: scroll to keep the choice in view
+    drawTapMenu(sel - first, items + first, std::min(4, n - first));
     int r = pump(120);
     if (r == 1) {
-      sel = (sel + 1) % 4;
+      sel = (sel + 1) % n;
       last = millis();
     } else if (r == 2 || r == 6) {
       return sel;
@@ -1466,6 +2098,7 @@ static int tapMenu() {
 }
 
 static void chooseClockFace() {
+  HoldBanners hold;
   const char *const names[] = {"CLASSIC", "BIG DIGITS", "NIXIE", "WORDS", "TETRIS", "P: DIGITS", "P: ANALOG"};
   const char *const styles[] = {"classic", "big", "nixie", "words", "tetris", "stacked", "analog"};
   constexpr int count = sizeof styles / sizeof styles[0];
@@ -1537,6 +2170,7 @@ static void runFocus() {
 
 static void checkChime() {
   if (CFG.chimeMinutes <= 0) return;
+  HoldBanners hold;
   time_t now = nowUtc();
   const Meeting *m = nextMeeting(meetings, now);
   if (!m || m->start == lastChimeFor || m->start - now > CFG.chimeMinutes * 60L) return;
@@ -1604,6 +2238,14 @@ void setup() {
   Serial.printf("[sd] %s\n", sdOk ? "card found" : "NO CARD (using built-in settings, no sound)");
   loadSettings();
   motionBegin();  // ADXL345 on the I2C port (optional)
+  petLoad();
+  {
+    Preferences pr;  // pick'em season record
+    pr.begin("pickem", true);
+    pickemW = pr.getInt("w", 0);
+    pickemL = pr.getInt("l", 0);
+    pr.end();
+  }
   orientKey = motionPortrait() ? 'P' : 'L';
   Serial.printf("[display] driver=%s brightness=%d swap_gb=%d\n", CFG.panelDriver.c_str(), CFG.brightness,
                 CFG.swapGreenBlue);
@@ -1711,7 +2353,13 @@ static GameInput readTilt(float basePitch, int rotation) {
   GameInput in;
   const Motion &m = motion();
   float s = rotation == 2 ? -1 : 1;  // upside down: left/right and back/forward swap
-  in.roll = constrain(s * m.gx / 0.5f, -1.0f, 1.0f);
+  if (rotation & 1) {  // portrait game: "right" is the turned screen's right edge
+    float gx, gy;
+    logicalGravity(rotation, gx, gy);
+    in.roll = constrain(gx / 0.5f, -1.0f, 1.0f);
+  } else {
+    in.roll = constrain(s * m.gx / 0.5f, -1.0f, 1.0f);
+  }
   float pv = s * -(m.gz - basePitch) / 0.5f;
   if (CFG.pitchInvert) pv = -pv;
   in.pitch = constrain(pv, -1.0f, 1.0f);
@@ -1719,14 +2367,22 @@ static GameInput readTilt(float basePitch, int rotation) {
 }
 
 static void runGames(int start) {
+  // standing on its end: the portrait game (BLOCKFALL) starts straight away; the menu is landscape-only
+  if (motionPortrait() && (start < 0 || start >= G_COUNT)) start = G_BLOCKFALL;
   int rotation = motionLandscapeRotation();
   displaySetRotation(rotation);
   bool tilt = motion().present;
   int sel = start >= 0 && start < G_COUNT ? start : 0;
   bool inMenu = start < 0 || start >= G_COUNT;
+  auto skipPortrait = [&](int dir) {  // the landscape menu skips portrait-only games
+    for (int k = 0; k < G_COUNT && gameIsPortrait(sel); k++) sel = (sel + dir + G_COUNT) % G_COUNT;
+  };
   int frame = 0;
   while (true) {
     if (inMenu) {  // tilt left/right to choose, tap to play; idle 20 s = back to the cards
+      rotation = motionLandscapeRotation();
+      displaySetRotation(rotation);
+      skipPortrait(1);
       uint32_t idle = millis(), menuOpened = idle, lastMove = 0;
       while (true) {
         int t = gameTick();
@@ -1740,10 +2396,12 @@ static void runGames(int start) {
           float r = readTilt(0, rotation).roll;
           if (fabsf(r) > 0.45f && millis() - lastMove > 450) {
             sel = (sel + (r > 0 ? 1 : G_COUNT - 1)) % G_COUNT;
+            skipPortrait(r > 0 ? 1 : -1);
             lastMove = idle = millis();
           }
         } else if (millis() - idle > 2500) {  // no accelerometer: the menu flips through, then demos one
           sel = (sel + 1) % G_COUNT;
+          skipPortrait(1);
           if (millis() - idle > 6000) break;
         }
         if (millis() - idle > 20000) return;
@@ -1752,6 +2410,9 @@ static void runGames(int start) {
       }
     }
     inMenu = false;
+    // portrait games turn the screen (whichever way the clock leans); the others use the landscape rotation
+    rotation = gameIsPortrait(sel) ? (motion().present && motion().orient == 3 ? 3 : 1) : motionLandscapeRotation();
+    displaySetRotation(rotation);
     // ready
     uint32_t t0 = millis();
     while (millis() - t0 < 1500) {
@@ -1813,6 +2474,7 @@ static void runGames(int start) {
       delay(33);
     }
     if (!again) {
+      if (gameIsPortrait(sel) && motionPortrait()) return;  // still on its end: back to the tall screens
       if (!tilt) sel = (sel + 1) % G_COUNT;  // demo: move on to the next game
       inMenu = tilt;
     }
@@ -1851,10 +2513,23 @@ void loop() {
     runFocus();
     return;
   }
+  if (sandTotal) {  // so does a running sand timer
+    runSand();
+    return;
+  }
+  static uint32_t lastPetTick = 0;
+  if (millis() - lastPetTick > 60000) {  // the pet's needs move on even when its screen isn't up
+    lastPetTick = millis();
+    petHousekeeping();
+  }
 
   updateCardsJson();
   if (pinKey.length() && !rot.select(pinKey)) rot.select("clock");  // pinned card gone for now (game over?): clock
   int r = showCard(rot.current());
+  if (r == 7) {  // a news alert: show it, then carry on with the same card
+    showNewsBanner();
+    return;
+  }
   if (r == 5) {
     int g = webGameCmd;
     webGameCmd = -2;
@@ -1877,6 +2552,8 @@ void loop() {
       pump(1000);
     } else if (c == 3) {
       chooseClockFace();
+    } else if (c == 4) {
+      runSandSetup();
     }
     return;
   }

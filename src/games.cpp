@@ -12,13 +12,13 @@ uint16_t gfxColor(uint32_t c);
 void gfxText(const String &s, int x, int y, uint32_t color, int size);
 
 static inline void px(int x, int y, uint32_t c) {
-  if (x >= 0 && x < 64 && y >= 0 && y < 32) gfxPanel()->drawPixel(x, y, gfxColor(c));
+  if (x >= 0 && x < gfxPanel()->width() && y >= 0 && y < gfxPanel()->height()) gfxPanel()->drawPixel(x, y, gfxColor(c));
 }
 static inline void fill(int x, int y, int w, int h, uint32_t c) {
   if (w > 0 && h > 0) gfxPanel()->fillRect(x, y, w, h, gfxColor(c));
 }
 static inline void txt(const String &s, int x, int y, uint32_t c, int size = 1) { gfxText(s, x, y, c, size); }
-static void txtC(const String &s, int y, uint32_t c, int size = 1) { txt(s, (64 - (int)s.length() * 6 * size + size) / 2, y, c, size); }
+static void txtC(const String &s, int y, uint32_t c, int size = 1) { txt(s, (gfxPanel()->width() - (int)s.length() * 6 * size + size) / 2, y, c, size); }
 static void txtR(const String &s, int y, uint32_t c) { txt(s, 64 - (int)s.length() * 6 + 1, y, c); }
 static uint32_t mix(uint32_t a, uint32_t b, float t) {
   t = std::max(0.0f, std::min(1.0f, t));
@@ -53,10 +53,10 @@ static void line(int x0, int y0, int x1, int y1, uint32_t c) {
 }
 
 static const char *NAMES[G_COUNT] = {"DODGER", "TILTYBIRD", "MARBLERUN", "CATCH", "BREAKOUT", "RACER", "BALANCE",
-                                     "PONG", "SIMON", "LANDER", "REACTION"};
+                                     "PONG", "SIMON", "LANDER", "REACTION", "BLOCKFALL"};
 static const char *HINTS[G_COUNT] = {"TILT BANK", "LEAN BACK", "TILT ROLL", "TILT MOVE",
                                      "TILT PAD", "TILT STEER", "TILT LEVEL", "TILT PAD", "TILT+TAP",
-                                     "LEAN=BURN", "TAP ON GO"};
+                                     "LEAN=BURN", "TAP ON GO", "TILT TAP LEAN"};
 const char *gameName(int id) { return NAMES[id % G_COUNT]; }
 const char *gameHint(int id) { return HINTS[id % G_COUNT]; }
 
@@ -879,7 +879,268 @@ static GameInput reactionAuto() {
   return in;
 }
 
+// =============================================================== Blockfall: falling blocks, portrait 32x64 (10x20 well, 3 px cells)
+static const int BW = 10, BH = 20, BX0 = 1, BY0 = 4;
+static uint8_t bfB[BH][BW];  // 0 empty, 1..7 colour
+static int bfType, bfRot, bfX, bfY, bfNext, bfId;      // current piece (bfId counts spawned pieces), next type
+static int bfLines, bfLevel, bfGrav, bfLock, bfLockResets, bfSpawnDelay, bfFlash, bfT;
+static int bfMoveCd, bfLastDir, bfLastLow, bfBag[7], bfBagN;
+static uint32_t bfFlashRows;
+static bool bfActive, bfSoftLock;
+static const uint32_t BF_COL[8] = {0, 0xFF3CAC, 0xC6FF00, 0x2BE4C8, 0xFF8A1F, 0x3AA0FF, 0xFFD23F, 0xFF5050};  // I O T S Z J L
+static const uint32_t BF_EDGE[6] = {0x303848, 0x1F5A66, 0x5A2A66, 0x66561F, 0x1F6640, 0x662A2A};
+// base shapes (x,y) in a 3x3 box (4x4 for I); a clockwise turn maps (x,y) -> (n-1-y, x)
+static const int8_t BF_SH[7][4][2] = {{{0, 1}, {1, 1}, {2, 1}, {3, 1}}, {{1, 0}, {2, 0}, {1, 1}, {2, 1}}, {{1, 0}, {0, 1}, {1, 1}, {2, 1}},
+                                      {{1, 0}, {2, 0}, {0, 1}, {1, 1}}, {{0, 0}, {1, 0}, {1, 1}, {2, 1}}, {{0, 0}, {0, 1}, {1, 1}, {2, 1}},
+                                      {{2, 0}, {0, 1}, {1, 1}, {2, 1}}};
+static void bfCells(int type, int rot, int c[4][2]) {
+  int n = type == 0 ? 4 : 3;
+  for (int i = 0; i < 4; i++) {
+    int x = BF_SH[type][i][0], y = BF_SH[type][i][1];
+    for (int r = 0; r < (type == 1 ? 0 : rot & 3); r++) {
+      int nx = n - 1 - y, ny = x;
+      x = nx, y = ny;
+    }
+    c[i][0] = x, c[i][1] = y;
+  }
+}
+static bool bfFits(const uint8_t b[BH][BW], int type, int rot, int x, int y) {
+  int c[4][2];
+  bfCells(type, rot, c);
+  for (int i = 0; i < 4; i++) {
+    int cx = x + c[i][0], cy = y + c[i][1];
+    if (cx < 0 || cx >= BW || cy >= BH) return false;
+    if (cy >= 0 && b[cy][cx]) return false;
+  }
+  return true;
+}
+static int bfDrawType() {
+  if (bfBagN == 0) {
+    for (int i = 0; i < 7; i++) bfBag[i] = i;
+    for (int i = 6; i > 0; i--) std::swap(bfBag[i], bfBag[rnd() % (i + 1)]);
+    bfBagN = 7;
+  }
+  return bfBag[--bfBagN];
+}
+static bool bfSpawn() {
+  bfType = bfNext;
+  bfNext = bfDrawType();
+  bfRot = 0, bfX = 3, bfY = 0;
+  bfId++;
+  bfGrav = bfLock = bfLockResets = 0;
+  bfActive = true;
+  bfSoftLock = true;  // a lean still held from the last piece doesn't soft-drop this one
+  return bfFits(bfB, bfType, bfRot, bfX, bfY);
+}
+static void blockReset() {
+  memset(bfB, 0, sizeof(bfB));
+  bfLines = bfLevel = bfFlash = bfSpawnDelay = bfMoveCd = bfLastDir = bfT = bfId = bfBagN = 0;
+  bfLastLow = 0;
+  bfFlashRows = 0;
+  bfNext = bfDrawType();
+  bfSpawn();
+}
+static int bfGravInterval() { return std::max(3, 28 - 2 * bfLevel - bfLevel * bfLevel / 6); }
+static int bfGhostY() {
+  int y = bfY;
+  while (bfFits(bfB, bfType, bfRot, bfX, y + 1)) y++;
+  return y;
+}
+static void bfLockPiece() {
+  int c[4][2];
+  bfCells(bfType, bfRot, c);
+  for (int i = 0; i < 4; i++) {
+    int cx = bfX + c[i][0], cy = bfY + c[i][1];
+    if (cy >= 0 && cy < BH) bfB[cy][cx] = bfType + 1;
+  }
+  bfActive = false;
+  bfFlashRows = 0;
+  int n = 0;
+  for (int r = 0; r < BH; r++) {
+    bool full = true;
+    for (int x = 0; x < BW; x++) if (!bfB[r][x]) full = false;
+    if (full) bfFlashRows |= 1u << r, n++;
+  }
+  if (n) {
+    static const int PTS[5] = {0, 100, 300, 500, 800};
+    score += PTS[n] * (bfLevel + 1);
+    bfLines += n;
+    bfLevel = bfLines / 10;
+    bfFlash = 16;
+  } else bfSpawnDelay = 5;
+}
+static bool bfTry(int dx, int dy, int drot) {
+  int nr = (bfRot + drot) & 3;
+  static const int KICK[6][2] = {{0, 0}, {-1, 0}, {1, 0}, {-2, 0}, {2, 0}, {0, -1}};
+  for (int k = 0; k < (drot ? 6 : 1); k++) {
+    int nx = bfX + dx + KICK[k][0], ny = bfY + dy + KICK[k][1];
+    if (bfFits(bfB, bfType, nr, nx, ny)) {
+      bfX = nx, bfY = ny, bfRot = nr;
+      if (bfLockResets < 10 && !bfFits(bfB, bfType, bfRot, bfX, bfY + 1)) bfLock = 0, bfLockResets++;
+      return true;
+    }
+  }
+  return false;
+}
+static bool blockStep(const GameInput &in) {
+  bfT++;
+  if (in.pitch < 0.45f) bfLastLow = bfT;
+  if (in.pitch < 0.35f) bfSoftLock = false;
+  if (bfFlash > 0) {
+    if (--bfFlash == 0) {  // collapse the full rows
+      int w = BH - 1;
+      for (int r = BH - 1; r >= 0; r--) {
+        if (bfFlashRows >> r & 1) continue;
+        if (w != r) memcpy(bfB[w], bfB[r], BW);
+        w--;
+      }
+      for (; w >= 0; w--) memset(bfB[w], 0, BW);
+      bfFlashRows = 0;
+      bfSpawnDelay = 3;
+    }
+    return true;
+  }
+  if (!bfActive) {
+    if (--bfSpawnDelay > 0) return true;
+    return bfSpawn();
+  }
+  // sideways: a tilt past the dead zone steps once, then repeats faster the harder you tilt
+  int dir = in.roll > 0.25f ? 1 : in.roll < -0.25f ? -1 : 0;
+  if (dir == 0) bfMoveCd = 0, bfLastDir = 0;
+  else {
+    float a = std::min(1.0f, (fabsf(in.roll) - 0.25f) / 0.6f);
+    int interval = (int)(10 - 7 * a + 0.5f);
+    if (dir != bfLastDir) bfTry(dir, 0, 0), bfMoveCd = interval + 2, bfLastDir = dir;
+    else if (--bfMoveCd <= 0) bfTry(dir, 0, 0), bfMoveCd = interval;
+  }
+  if (in.tap) bfTry(0, 0, 1);
+  // a quick hard lean slams the piece down
+  if (in.pitch > 0.8f && bfT - bfLastLow <= 10 && !bfSoftLock) {
+    int gy = bfGhostY();
+    score += 2 * (gy - bfY);
+    bfY = gy;
+    bfLockPiece();
+    return true;
+  }
+  bool soft = in.pitch > 0.45f && !bfSoftLock;
+  if (++bfGrav >= (soft ? 2 : bfGravInterval())) {
+    bfGrav = 0;
+    if (bfFits(bfB, bfType, bfRot, bfX, bfY + 1)) {
+      bfY++;
+      if (soft) score++;
+    }
+  }
+  if (!bfFits(bfB, bfType, bfRot, bfX, bfY + 1)) {
+    if (++bfLock >= (soft ? 4 : 14)) bfLockPiece();
+  }
+  return true;
+}
+static void bfCell(int cx, int cy, uint32_t col) {  // one 3x3 well cell, bevelled so the grid reads on an LED panel
+  int x = BX0 + cx * 3, y = BY0 + cy * 3;
+  uint32_t dark = mix(col, 0, 0.5f);
+  fill(x, y, 3, 3, dark);
+  fill(x, y, 2, 2, col);
+}
+static void bfDigits(int v, int x, int y, uint32_t col, int cap = 99999) {  // own 3x4 digits for the top strip
+  static const uint16_t D[10] = {0b111101101111, 0b010110010111, 0b111001100111, 0b111011001111, 0b101101111001,
+                                 0b111110001111, 0b111100111111, 0b111001010010, 0b111101111111, 0b111111001111};
+  char s[8];
+  snprintf(s, sizeof(s), "%d", std::min(v, cap));
+  for (int i = 0; s[i]; i++)
+    for (int r = 0; r < 4; r++)
+      for (int c = 0; c < 3; c++)
+        if (D[s[i] - '0'] >> (11 - (r * 3 + c)) & 1) px(x + i * 4 + c, y + r, col);
+}
+static void blockDraw(int frame) {
+  gfxBegin();
+  uint32_t edge = BF_EDGE[bfLevel % 6];
+  fill(0, BY0, 1, BH * 3, edge);
+  fill(31, BY0, 1, BH * 3, edge);
+  bfDigits(score, 1, 0, 0xFFFFFF);
+  int c[4][2];
+  bfCells(bfNext, 0, c);  // next piece, 2 px cells centred in the top-right of the strip
+  int minx = 9, maxx = 0, miny = 9, maxy = 0;
+  for (int i = 0; i < 4; i++) minx = std::min(minx, c[i][0]), maxx = std::max(maxx, c[i][0]), miny = std::min(miny, c[i][1]), maxy = std::max(maxy, c[i][1]);
+  int ox = 26 - (maxx - minx + 1), oy = (4 - (maxy - miny + 1) * 2) / 2;
+  for (int i = 0; i < 4; i++) fill(ox + (c[i][0] - minx) * 2, oy + (c[i][1] - miny) * 2, 2, 2, BF_COL[bfNext + 1]);
+  for (int r = 0; r < BH; r++) {
+    bool fl = bfFlash > 0 && (bfFlashRows >> r & 1);
+    for (int x = 0; x < BW; x++) {
+      if (fl) { if ((bfFlash / 2) % 2) fill(BX0 + x * 3, BY0 + r * 3, 3, 3, 0xFFFFFF); else bfCell(x, r, BF_COL[bfB[r][x]]); }
+      else if (bfB[r][x]) bfCell(x, r, BF_COL[bfB[r][x]]);
+      else px(BX0 + x * 3 + 1, BY0 + r * 3 + 1, 0x14161E);
+    }
+  }
+  if (bfActive) {
+    int gy = bfGhostY();
+    bfCells(bfType, bfRot, c);
+    if (gy > bfY) for (int i = 0; i < 4; i++) { int x = BX0 + (bfX + c[i][0]) * 3, y = BY0 + (gy + c[i][1]) * 3; fill(x, y, 3, 3, mix(0, BF_COL[bfType + 1], 0.22f)); }
+    for (int i = 0; i < 4; i++) if (bfY + c[i][1] >= 0) bfCell(bfX + c[i][0], bfY + c[i][1], BF_COL[bfType + 1]);
+  }
+  (void)frame;
+  gfxEnd();
+}
+// ---- autopilot: try every rotation and column, score the board (height, holes, bumpiness, lines), steer to the best
+static int apId = -1, apRot, apX, apTaps, apCd;
+static float bfEval(uint8_t b[BH][BW], int type, int rot, int x) {
+  if (!bfFits(b, type, rot, x, 0)) return -1e9f;
+  int y = 0;
+  while (bfFits(b, type, rot, x, y + 1)) y++;
+  int c[4][2];
+  bfCells(type, rot, c);
+  for (int i = 0; i < 4; i++) if (y + c[i][1] >= 0) b[y + c[i][1]][x + c[i][0]] = 1;
+  int lines = 0;
+  for (int r = BH - 1; r >= 0; r--) {
+    bool full = true;
+    for (int cx = 0; cx < BW; cx++) if (!b[r][cx]) full = false;
+    if (full) {
+      lines++;
+      for (int k = r; k > 0; k--) memcpy(b[k], b[k - 1], BW);
+      memset(b[0], 0, BW);
+      r++;
+    }
+  }
+  int agg = 0, holes = 0, bump = 0, last = 0;
+  for (int cx = 0; cx < BW; cx++) {
+    int h = 0;
+    for (int r = 0; r < BH; r++) {
+      if (b[r][cx]) { if (!h) h = BH - r; } else if (h) holes++;
+    }
+    agg += h;
+    if (cx) bump += abs(h - last);
+    last = h;
+  }
+  return -0.51f * agg + 0.76f * lines - 0.36f * holes - 0.18f * bump;
+}
+static GameInput blockAuto() {
+  GameInput in;
+  if (!bfActive || bfFlash > 0) return in;
+  if (apId != bfId) {
+    apId = bfId, apTaps = 0, apCd = 2;
+    float best = -1e9f;
+    apRot = 0, apX = bfX;
+    uint8_t tmp[BH][BW];
+    for (int r = 0; r < (bfType == 1 ? 1 : bfType == 0 || bfType == 3 || bfType == 4 ? 2 : 4); r++)
+      for (int x = -2; x < BW; x++) {
+        memcpy(tmp, bfB, sizeof(tmp));
+        float v = bfEval(tmp, bfType, r, x);
+        if (v > best + 1e-4f) best = v, apRot = r, apX = x;
+      }
+    return in;  // a frame of level pitch first, so the hard lean reads as a flick
+  }
+  if (apCd > 0) apCd--;
+  if (bfRot != apRot && apTaps < 5) {
+    if (apCd == 0) in.tap = true, apTaps++, apCd = 3;
+    return in;
+  }
+  if (bfX < apX) in.roll = 1.0f;
+  else if (bfX > apX) in.roll = -1.0f;
+  else in.pitch = 0.95f;
+  return in;
+}
+
 // =============================================================== dispatch
+bool gameIsPortrait(int id) { return id == G_BLOCKFALL; }
 void gameReset(int id, uint32_t seed) {
   rs = seed ? seed : 1;
   score = 0;
@@ -895,6 +1156,7 @@ void gameReset(int id, uint32_t seed) {
     case G_SIMON: simonReset(); break;
     case G_LANDER: landerReset(); break;
     case G_REACTION: reactionReset(); break;
+    case G_BLOCKFALL: blockReset(); break;
     default: balanceReset(); break;
   }
 }
@@ -910,6 +1172,7 @@ bool gameStep(int id, const GameInput &in) {
     case G_SIMON: return simonStep(in);
     case G_LANDER: return landerStep(in);
     case G_REACTION: return reactionStep(in);
+    case G_BLOCKFALL: return blockStep(in);
     default: return balanceStep(in);
   }
 }
@@ -925,6 +1188,7 @@ void gameDraw(int id, int frame) {
     case G_SIMON: simonDraw(frame); break;
     case G_LANDER: landerDraw(frame); break;
     case G_REACTION: reactionDraw(frame); break;
+    case G_BLOCKFALL: blockDraw(frame); break;
     default: balanceDraw(frame); break;
   }
 }
@@ -941,6 +1205,7 @@ GameInput gameAutopilot(int id) {
     case G_SIMON: return simonAuto();
     case G_LANDER: return landerAuto();
     case G_REACTION: return reactionAuto();
+    case G_BLOCKFALL: return blockAuto();
     default: return balanceAuto();
   }
 }
@@ -954,14 +1219,49 @@ void drawGameMenu(int sel, int best, int frame) {
   txtC((frame / 45) % 2 && record.length() <= 10 && record.length() ? record : String("TAP=PLAY"), 23, 0x80D7FF);
   gfxEnd();
 }
+static bool portraitScreen() { return gfxPanel()->width() < gfxPanel()->height(); }
 void drawGameReady(int id, int frame) {
   gfxBegin();
-  txtC(gameName(id), 4, 0xFFC000);
-  txtC(gameHint(id), 18, (frame / 8) % 2 ? 0xFFFFFF : 0x909090);
+  if (portraitScreen()) {
+    if (id == G_BLOCKFALL) {
+      txtC("BLOCK", 6, 0xFF3CAC);
+      txtC("FALL", 15, 0xC6FF00);
+      txtC("TILT", 31, (frame / 8) % 2 ? 0xFFFFFF : 0x909090);
+      txtC("TAP", 40, (frame / 8) % 2 ? 0xFFFFFF : 0x909090);
+      txtC("LEAN", 49, (frame / 8) % 2 ? 0xFFFFFF : 0x909090);
+      static const uint32_t C[4] = {0x2BE4C8, 0xFFD23F, 0xFF8A1F, 0x3AA0FF};
+      for (int k = 0; k < 4; k++) {  // a little row of blocks along the bottom, chasing colours
+        fill(3 + k * 7, 58, 6, 6, C[(k + frame / 6) % 4]);
+      }
+    } else {
+      txtC(gameName(id), 20, 0xFFC000);
+    }
+  } else {
+    txtC(gameName(id), 4, 0xFFC000);
+    txtC(gameHint(id), 18, (frame / 8) % 2 ? 0xFFFFFF : 0x909090);
+  }
   gfxEnd();
 }
 void drawGameOver(int id, int sc, int best, bool newBest, int frame) {
   gfxBegin();
+  if (portraitScreen()) {
+    txtC("GAME", 8, 0xFF4040);
+    txtC("OVER", 17, 0xFF4040);
+    String s = String(sc);
+    if (s.length() <= 5) txtC(s, 30, 0xFFFFFF);
+    else bfDigits(sc, (32 - ((int)s.length() * 4 - 1)) / 2, 31, 0xFFFFFF, 999999999);
+    if (newBest) {
+      txtC("NEW", 44, (frame / 5) % 2 ? 0xFFD700 : 0xFF8C00);
+      txtC("BEST", 53, (frame / 5) % 2 ? 0xFFD700 : 0xFF8C00);
+    } else {
+      txtC("BEST", 44, 0x40C0FF);
+      String b = String(best);
+      if (b.length() <= 5) txtC(b, 53, 0x40C0FF);
+      else bfDigits(best, (32 - ((int)b.length() * 4 - 1)) / 2, 54, 0x40C0FF, 999999999);
+    }
+    gfxEnd();
+    return;
+  }
   txtC("GAME OVER", 1, 0xFF4040);
   txtC(String(sc), 11, 0xFFFFFF);
   if (newBest) txtC("NEW BEST!", 23, (frame / 5) % 2 ? 0xFFD700 : 0xFF8C00);

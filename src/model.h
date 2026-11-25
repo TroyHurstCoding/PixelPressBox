@@ -173,6 +173,59 @@ struct WorldCity {
   String dst;                      // "us" | "eu" | "au" | "" (none)
 };
 
+// ---- batch 5 data
+struct Launch {                    // Launch Library 2 (thespacedevs.com)
+  String id, name, rocket, mission, pad, provider, status;  // status: "Go", "TBD", "TBC", "Hold", "Success"...
+  time_t net = 0;                  // UTC launch time ("no earlier than")
+  bool vandenberg = false;         // visible from Southern California
+};
+struct RideWait {                  // queue-times.com
+  String name;
+  int wait = 0;                    // minutes
+  bool open = false;
+};
+struct ParkWaits {
+  bool ok = false;
+  String park;                     // "DISNEYLAND"
+  time_t fetched = 0;
+  std::vector<RideWait> rides;     // open rides, longest wait first
+};
+struct StockQuote {                // Robinhood stock-token prices (api.robinhood.com/rhj/prices)
+  String symbol;
+  bool ok = false;
+  float price = 0, bid = 0, ask = 0, dayHigh = 0, dayLow = 0;
+  float prevClose = 0;             // last price the clock saw on the previous trading day (0 = unknown)
+  float open = 0;                  // first price the clock saw today
+  bool halted = false;
+  time_t at = 0;
+  std::vector<float> spark;        // today's samples, oldest first (at most 64)
+};
+struct NewsItem {                  // ESPN news, filtered for the owner
+  String id, league, headline, why;  // why: "BUF" / "J.ALLEN" / "TRADE": what matched
+  time_t published = 0;
+  uint32_t color = 0xFFFFFF;       // team colour when known
+  bool read = false;
+};
+struct DriveTime {                 // TomTom routing with live traffic
+  bool ok = false;
+  String label;                    // "WORK"
+  int minutes = 0, typical = 0, delay = 0;   // now, without traffic, traffic delay (minutes)
+  float km = 0;
+  time_t at = 0;
+};
+struct LottoDraw {                 // Powerball
+  bool ok = false;
+  time_t drawDate = 0;             // last draw (local date at 00:00 UTC of that day)
+  int white[5] = {0, 0, 0, 0, 0};
+  int power = 0, multiplier = 0;
+  String jackpot;                  // "$412 MILLION" when known, else ""
+  time_t nextDraw = 0;             // next draw, UTC
+};
+struct PickemPick {                // one pick: the game and the team picked to win
+  String league, gameId, pick;     // pick = team abbr
+  char result = ' ';               // ' ' pending, 'W', 'L', 'T' (push)
+};
+
 struct Countdown {
   String name;
   int year = 0, month = 0, day = 0;  // local date; year 0 = every year (birthdays, anniversaries)
@@ -266,6 +319,28 @@ struct Settings {
   std::vector<FptsPlayer> fptsPlayers;
   std::vector<std::pair<String, float>> fptsRules;     // e.g. ("passTD", 5); see fantasy.cpp for the defaults
   std::vector<std::pair<int, float>> fptsDstTiers;     // (max points allowed, fantasy points), first match wins
+  // batch 5 screens
+  bool cardFlap = true, cardDials = true, cardTerminal = true, cardSlots = true, cardWeeks = true;
+  bool cardEyes = true, cardEightBall = true, cardParty = true, cardMaze = true, cardPet = true;
+  bool cardLaunch = true, cardPlayoff = true, cardWaits = true, cardStocks = true, cardNews = true;
+  bool cardLastPlay = true, cardDrive = true, cardLotto = true, cardPickem = true;
+  bool flapSound = true;                   // split-flap clock clicks when the minute changes (if sound is on)
+  int birthYear = 0, birthMonth = 1, birthDay = 1;  // life in weeks (0 = card off)
+  int lifeYears = 80;
+  String parkId = "16", parkName = "DISNEYLAND";    // queue-times.com park id (16 Disneyland, 17 California Adventure)
+  std::vector<String> stocks{"SPY", "QQQ", "AAPL"};  // Robinhood stock-token symbols
+  // news alerts (ESPN): banner over the current screen
+  bool newsAlerts = true, newsSound = true;
+  bool newsFavorites = true, newsFantasy = true;     // teams in favorites / players in fantasy_points
+  std::vector<String> newsKeywords{"trade", "traded", "injury", "injured", "out for", "torn", "signs", "released"};
+  std::vector<String> newsLeagues{"nfl"};
+  int newsQuietStart = 22, newsQuietEnd = 7;         // no banners (they still collect) in these hours
+  // drive time (TomTom key from developer.tomtom.com, free tier)
+  String tomtomKey, driveLabel = "WORK", driveAddress;
+  float driveLat = 0, driveLon = 0;                  // found from driveAddress
+  int driveFrom = 6, driveTo = 10;                   // hours (local) it's a priority card on weekdays
+  // pick'em: picks made on the phone page
+  std::vector<PickemPick> pickem;
   String surfName = "VENICE";
   float surfLat = 33.985f, surfLon = -118.475f;  // Venice Breakwater
   // accelerometer (ADXL345): orientation auto | landscape | portrait; mirror flips which way portrait turns;

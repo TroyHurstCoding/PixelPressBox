@@ -60,6 +60,16 @@ class H(BaseHTTPRequestHandler):
                                         "raw": [0.02, -0.97, 0.21], "g": [-0.02, 0.97, 0.21]}))
         if p == "/motion/cal":
             return self.out("Step %s saved (preview)" % q.get("s"), "text/plain")
+        if p == "/pickem/games":  # a made-up week of games
+            return self.out(json.dumps([
+                {"lg": "nfl", "id": "401", "a": "MIA", "h": "BUF", "t": 1764525600, "s": "p", "ln": "BUF -6.5"},
+                {"lg": "nfl", "id": "402", "a": "KC", "h": "DEN", "t": 1764537000, "s": "p"},
+                {"lg": "nfl", "id": "403", "a": "LAR", "h": "SEA", "t": 1764450000, "s": "i"},
+                {"lg": "nba", "id": "501", "a": "BOS", "h": "LAL", "t": 1764480000, "s": "p"}]))
+        if p == "/stocks/list":
+            return self.out(json.dumps([["AAPL", "Apple Inc."], ["AMZN", "Amazon.com"], ["GOOGL", "Alphabet"],
+                                        ["MSFT", "Microsoft"], ["NVDA", "NVIDIA"], ["QQQ", "Invesco QQQ"],
+                                        ["SPY", "SPDR S&P 500 ETF"], ["TSLA", "Tesla"]]))
         if p == "/wifi":
             return self.out(json.dumps({"current": STATE["wifi"][0] if STATE["wifi"] else "", "saved": STATE["wifi"]}))
         if p == "/wifi/del":

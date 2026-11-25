@@ -257,6 +257,33 @@ from ESPN's box scores, the same way OctoBoxVR's `fantasy-poll.mjs` does it, and
 Limits: field goals are a flat amount (no kick distances in the box score) and 2-point conversions aren't counted.
 The older "Stat lines to follow" list (`fantasy_players`) still shows box-score lines for any league.
 
+### Batch 5 cards
+Preview: `screens_preview_batch5.png`. Every card can be switched off under Settings, Screens in the rotation.
+- **Clocks:** split-flap board (digits flip with a click, second row = your team's next game), analog clock with
+  three dials (temperature, date, a ring that fills as the next game gets closer), terminal (`$ date`, a `| / - \`
+  spinner, the odd fake command), slot machine (reels spin each minute, jackpot on the hour), and **life in weeks**
+  (set your birthday under Settings; one dot per month of an 80-year life, this month blinking).
+- **Fun:** robot eyes (follow the tilt, light up when your team scores, sleepy at night), fortune ball (shake or tap
+  for an answer), party tools (shake to roll dice / flip a coin / spin a wheel; tap to switch), maze (carved and solved
+  on screen), and the **pixel pet**: tap to feed it, tilt to roll its ball; it sleeps at night, cheers when your team
+  scores, grows from an egg over a week of care, and gets grumpy if ignored. It never dies.
+- **Sand timer:** double tap, choose TIMER, then tap once per 15 seconds; it starts 3 s after the last tap. While it
+  runs, tap = +15 s, double tap = stop. Or use Sand timer on the phone's Remote tab.
+- **Sports:** last play (live favorite games: score bug, down and distance, the play), playoff race (seed, games back,
+  magic number), and **pick'em**: tap your winners under Settings, Pick'em; the card shows wins and losses as games end
+  and keeps your season record.
+- **News alerts:** ESPN headlines about your teams and fantasy players drop down as a banner over whatever is showing
+  (with a chime), and the last ten are on the "News alerts" card. Choose leagues, keywords (trade, injury, out...)
+  and quiet hours under Settings, News alerts. The first download after a restart fills the list without banners.
+- **Data:** next rocket launch (Launch Library 2; takes over 10 minutes before liftoff, flags Vandenberg launches),
+  ride waits (queue-times.com; Disneyland by default), stocks (Robinhood stock tokens: pick symbols under Settings,
+  Stocks; every 2 minutes on weekdays; day change is measured from the last price the clock saw the previous day, so
+  it shows after the clock has been on through one close), drive time (needs a free TomTom key and a destination
+  under Settings, Drive time; a priority card in your weekday commute hours), Powerball (last numbers and a countdown
+  to the next draw; no free source has the jackpot amount, so it isn't shown).
+- **BLOCKFALL** (game): stand the clock on its end and shake it. Tilt to move, tap to rotate, lean back to drop
+  (a quick hard lean drops it all the way).
+
 ### Microphones
 The board's ES7210 microphones feed the sound visualizer and, if you turn it on, **clap control**: two claps in a
 row = next screen (`"mic": {"clap_control": true, "sensitivity": "high"}`). Claps are ignored while the clock is
@@ -311,11 +338,14 @@ game over, tap to play again; otherwise it returns to the menu. Best scores are 
 - **Simon:** watch the colours, then repeat them: tilt to choose a column, tap to press it.
 - **Lander:** lean back to fire the engine, tilt to drift, and touch down gently on the yellow pad. Each landing
   scores 50 plus leftover fuel, and the next pad is smaller with stronger gravity.
+- **BLOCKFALL** (portrait only): stand the clock on its end and shake it, or press it on the phone. Tilt to move,
+  tap to rotate, lean back to drop faster, a quick hard lean to drop all the way.
 - **Reaction:** wait for green, then tap. Five rounds; the score is 1000 minus your average time in milliseconds
   (timed to the frame, about 33 ms).
 "Lean back" is measured from how you're holding the clock when the game starts. If it comes out backwards, set
 `"motion": {"pitch_invert": true}`. Without the accelerometer the games play themselves as a demo (a minute each).
-Desktop check: `test/sim/games_sim.cpp` plays every game on its autopilot.
+Desktop check: `test/sim/games_sim.cpp` plays every game on its autopilot. `bash tools/desktop_build.sh` builds and
+runs all the desktop tests and screen sims (after one `pio run`, which downloads the libraries it needs).
 
 ### Spotify
 Spotify's developer apps now require the app owner to have **Premium**.

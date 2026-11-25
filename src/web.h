@@ -24,4 +24,6 @@ extern String webPinRequest;
 extern volatile bool webPinChanged;
 extern volatile bool webCheckUpdate;  // "Check for update" pressed
 extern volatile int webGameCmd;       // -2 nothing, -1 stop the game, 0..6 play that game, 99 open the games menu
+extern volatile int webSandCmd;       // -1 nothing, 0 stop the sand timer, N start an N-second one
+extern String webPickemJson;          // this week's games for the pick'em picker (set by the main loop)
 extern String webCardsJson;         // {"pinned":"...","cards":[{"k":"clock","l":"Clock"},...]} (set by the main loop)
